@@ -117,3 +117,6 @@ $RECYCLE.BIN/
 .ideavo/project
 .bun-cache/ 
 node_modules/ 
+.next/ 
+lodash-4.17.21.tgz 
+.env 
