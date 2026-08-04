@@ -1,0 +1,641 @@
+You are my Senior Software Architect and AI Engineer.
+
+I am NOT building a normal IELTS practice website.
+
+I am building an AI-first adaptive learning platform called "AI IELTS Examiner."
+
+The AI Backend Brain is the actual product.
+
+The frontend is only a beautiful interface for students to interact with the AI.
+
+====================================================================
+PROJECT GOAL
+====================================================================
+
+Build a production-ready AI IELTS platform that behaves like a real IELTS examiner and a personal AI tutor.
+
+The AI should understand each student individually, generate original IELTS-style questions, evaluate answers, detect weaknesses, and continuously personalize future practice until the student reaches their target IELTS band.
+
+Never build this like a normal question bank.
+
+====================================================================
+BACKEND (MOST IMPORTANT)
+====================================================================
+
+The backend contains all intelligence.
+
+The frontend should never contain business logic.
+
+The backend should be built using:
+
+- FastAPI
+- PostgreSQL
+- SQLAlchemy
+- Pydantic
+- JWT Authentication
+- OpenAI API
+- Docker
+
+====================================================================
+BACKEND ARCHITECTURE
+====================================================================
+
+backend/
+
+app/
+
+    main.py
+
+    api/
+
+        auth.py
+
+        dashboard.py
+
+        reading.py
+
+        listening.py
+
+        writing.py
+
+        speaking.py
+
+        mock_test.py
+
+        reports.py
+
+        ai.py
+
+    ai/
+
+        orchestrator.py
+
+        knowledge_base.py
+
+        question_generator.py
+
+        evaluation_engine.py
+
+        adaptive_learning.py
+
+        band_predictor.py
+
+        recommendation_engine.py
+
+        prompt_library.py
+
+    models/
+
+    schemas/
+
+    database/
+
+    services/
+
+    utils/
+
+====================================================================
+AI BRAIN
+====================================================================
+
+The AI Brain controls the entire platform.
+
+Responsibilities:
+
+• Student Profile Management
+
+• Diagnostic Test
+
+• IELTS Knowledge Base
+
+• Question Generation
+
+• Question Validation
+
+• Answer Evaluation
+
+• Weakness Detection
+
+• Band Prediction
+
+• Adaptive Learning
+
+• Recommendation Engine
+
+• Progress Tracking
+
+====================================================================
+QUESTION GENERATION
+====================================================================
+
+The AI must NEVER generate random IELTS questions.
+
+Question generation pipeline:
+
+Student Profile
+
+↓
+
+Learning History
+
+↓
+
+Current Band
+
+↓
+
+Target Band
+
+↓
+
+Weakness Detection
+
+↓
+
+Choose IELTS Skill
+
+↓
+
+Choose Official Question Type
+
+↓
+
+Choose Topic
+
+↓
+
+Choose Difficulty
+
+↓
+
+Choose Vocabulary Level
+
+↓
+
+Choose Grammar Complexity
+
+↓
+
+Use IELTS Knowledge Base
+
+↓
+
+Generate NEW ORIGINAL IELTS-style Question
+
+↓
+
+Validate
+
+↓
+
+Return Question
+
+The AI must understand the official IELTS blueprint and public band descriptors.
+
+Never copy copyrighted IELTS questions.
+
+Generate new questions that feel like the real exam.
+
+====================================================================
+FIRST TIME USER
+====================================================================
+
+If a student is new,
+
+do NOT immediately personalize.
+
+First conduct a diagnostic assessment.
+
+Estimate:
+
+Current Band
+
+Grammar
+
+Vocabulary
+
+Reading
+
+Listening
+
+Writing
+
+Speaking
+
+Then create the student's learning profile.
+
+From the second session onward,
+
+use adaptive learning.
+
+====================================================================
+ADAPTIVE LEARNING
+====================================================================
+
+This is the biggest feature.
+
+The AI never asks:
+
+"What random question should I generate?"
+
+Instead it asks:
+
+"What is the best next practice to improve this student's weakest skill and move them toward their target band?"
+
+Example
+
+Current Band
+
+6.0
+
+Target
+
+7.5
+
+Weakness
+
+Matching Headings
+
+↓
+
+Generate Reading Passage
+
+↓
+
+Matching Headings
+
+↓
+
+Band 6.5 vocabulary
+
+↓
+
+Increase difficulty gradually
+
+Every future question should depend on previous performance.
+
+====================================================================
+EVALUATION ENGINE
+====================================================================
+
+Evaluate
+
+Grammar
+
+Vocabulary
+
+Task Achievement
+
+Coherence
+
+Sentence Structure
+
+Logic
+
+Pronunciation
+
+Fluency
+
+Accuracy
+
+Time Management
+
+Return:
+
+Section Band
+
+Overall Band
+
+Strengths
+
+Weaknesses
+
+Improvement Tips
+
+Next AI Recommendation
+
+====================================================================
+DATABASE
+====================================================================
+
+Users
+
+Student Profiles
+
+Diagnostic Tests
+
+Practice Sessions
+
+Mock Tests
+
+Questions
+
+Answers
+
+Scores
+
+Weaknesses
+
+Recommendations
+
+Achievements
+
+Progress History
+
+Learning History
+
+====================================================================
+FRONTEND
+====================================================================
+
+The frontend should be modern, premium, responsive, and minimal.
+
+The frontend should NEVER generate questions.
+
+The frontend should NEVER evaluate answers.
+
+The frontend should NEVER decide the next lesson.
+
+The frontend only communicates with backend APIs.
+
+====================================================================
+LANDING PAGE
+====================================================================
+
+Hero Section
+
+Features
+
+How AI Works
+
+Pricing
+
+Testimonials
+
+FAQ
+
+Login
+
+Register
+
+====================================================================
+DASHBOARD
+====================================================================
+
+Welcome Message
+
+Current Estimated Band
+
+Target Band
+
+Continue Practice
+
+Today's AI Recommendation
+
+Quick Practice
+
+Start Full Mock
+
+Progress Chart
+
+Recent Activity
+
+Study Streak
+
+Achievements
+
+AI Recommendations
+
+====================================================================
+READING
+====================================================================
+
+Choose:
+
+Full Reading
+
+Passage 1
+
+Passage 2
+
+Passage 3
+
+Practice by Question Type
+
+Examples
+
+True False Not Given
+
+Matching Headings
+
+Matching Information
+
+Summary Completion
+
+Multiple Choice
+
+Sentence Completion
+
+Timer
+
+Submit
+
+Results
+
+====================================================================
+LISTENING
+====================================================================
+
+Choose:
+
+Full Listening
+
+Part 1
+
+Part 2
+
+Part 3
+
+Part 4
+
+Audio Player
+
+Question Panel
+
+Timer
+
+Submit
+
+Results
+
+====================================================================
+WRITING
+====================================================================
+
+Choose
+
+Full Writing
+
+Task 1
+
+Task 2
+
+Writing Editor
+
+Word Counter
+
+Timer
+
+Submit
+
+AI Feedback
+
+Band Score
+
+====================================================================
+SPEAKING
+====================================================================
+
+Choose
+
+Full Speaking
+
+Part 1
+
+Part 2
+
+Part 3
+
+Voice Recorder
+
+Waveform
+
+Timer
+
+Submit
+
+AI Evaluation
+
+Pronunciation
+
+Fluency
+
+Grammar
+
+Vocabulary
+
+Band Score
+
+====================================================================
+FULL MOCK TEST
+====================================================================
+
+Completely separate from practice.
+
+Must replicate the official IELTS Computer Delivered Exam.
+
+Listening
+
+↓
+
+Reading
+
+↓
+
+Writing
+
+↓
+
+Speaking
+
+Official timings
+
+Official navigation
+
+Official question counts
+
+Official section order
+
+At the end
+
+Return
+
+Reading Band
+
+Listening Band
+
+Writing Band
+
+Speaking Band
+
+Overall Band
+
+Complete AI Report
+
+====================================================================
+REPORTS
+====================================================================
+
+Overall Band
+
+Section Scores
+
+Progress Graphs
+
+Weakness Analysis
+
+Strength Analysis
+
+Study Statistics
+
+AI Recommendations
+
+Learning History
+
+====================================================================
+PROFILE
+====================================================================
+
+Personal Details
+
+Current Band
+
+Target Band
+
+Study Hours
+
+Completed Practice
+
+Completed Mock Tests
+
+Achievements
+
+Subscription
+
+====================================================================
+SETTINGS
+====================================================================
+
+Theme
+
+Notifications
+
+Language
+
+Account
+
+Subscription
+
+====================================================================
+FINAL PHILOSOPHY
+====================================================================
+
+The AI Brain is the product.
+
+The frontend is only the interface.
+
+Students should never feel they are using a question bank.
+
+They should feel they are learning from a professional IELTS examiner and a personal AI tutor that remembers everything about them, understands their weaknesses, generates original IELTS-style questions, evaluates them intelligently, and continuously adapts their learning journey until they achieve their target IELTS band.
+
+Build the project using clean architecture, modular code, production-ready folder structure, reusable components, proper API design, scalability, and maintainability.
