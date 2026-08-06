@@ -98,6 +98,35 @@ def evaluate(payload: SessionRequest, user: models.User = Depends(get_current_us
     return {"evaluation": result, "updatedProfile": updated, "itemFeedback": result.get("perItemFeedback", [])}
 
 
+@router.post("/check")
+def check_answer(payload: SessionRequest, user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Grade ONE answered question instantly so the frontend can show right/wrong,
+    tip and suggestion before moving on. No profile changes and no DB writes.
+
+    The frontend sends the whole session plus just the answers it wants checked;
+    every answered item is returned as per-item feedback. Unanswered items are skipped.
+    """
+    if not payload.session:
+        raise HTTPException(status_code=400, detail="Practice session is required.")
+    answered = {
+        item_id: value
+        for item_id, value in (payload.answers or {}).items()
+        if str(value or "").strip()
+    }
+    if not answered:
+        raise HTTPException(status_code=400, detail="Answer the question before checking it.")
+    session_data = _session_with_answers(db, user.id, payload.session)
+    items = session_data.get("items") or []
+    results = []
+    for item in items:
+        item_id = str(item.get("id"))
+        if item_id in answered:
+            results.append(ev.evaluate_item(item, answered[item_id]))
+    if not results:
+        raise HTTPException(status_code=404, detail="This session could not be found. Submit the section for a full report instead.")
+    return {"itemFeedback": results}
+
+
 @router.post("/vocab")
 def vocab(payload: BrainRequest, user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Generate one fresh IELTS vocabulary word with the AI provider.

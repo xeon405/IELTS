@@ -4,6 +4,8 @@ import { useEffect, useState, type ReactNode } from "react";
 import {
   AlarmClock,
   AlertTriangle,
+  ArrowLeft,
+  ArrowRight,
   BookOpenCheck,
   CheckCircle2,
   ChevronDown,
@@ -303,12 +305,64 @@ function PracticeWorkbench({
   const config = moduleConfig[session.module];
   const Icon = config.icon;
   const [elapsed, setElapsed] = useState(0);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [checkedFeedback, setCheckedFeedback] = useState<Record<string, ItemFeedback>>({});
+  const [checking, setChecking] = useState(false);
 
   useEffect(() => {
     setElapsed(0);
+    setCurrentIndex(0);
+    setCheckedFeedback({});
   }, [session.id]);
 
   const liveTiming = computeTimingMetrics(session.module, session.items.length, answers, session.durationMinutes, elapsed);
+  const currentItem = session.items[Math.min(currentIndex, session.items.length - 1)];
+  const currentId = currentItem?.id ?? "";
+  const currentValue = answers[currentId] ?? "";
+  const currentFeedback = checkedFeedback[currentId];
+  const isLast = currentIndex >= session.items.length - 1;
+  const checkedCount = session.items.filter((item) => Boolean(checkedFeedback[item.id])).length;
+
+  const handleAnswer = (id: string, value: string) => {
+    if (checkedFeedback[id]) {
+      setCheckedFeedback((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    }
+    onAnswer(id, value);
+  };
+
+  const handleCheck = async () => {
+    if (!currentValue.trim() || checking || currentFeedback) return;
+    setChecking(true);
+    try {
+      const feedbackList = await brainApi.check(session, { [currentId]: currentValue });
+      const feedback = feedbackList.find((entry) => entry.id === currentId) ?? feedbackList[0];
+      if (feedback) {
+        setCheckedFeedback((prev) => ({ ...prev, [currentId]: feedback }));
+      } else {
+        toast({ title: "No feedback returned", description: "Submit the whole section for the full report instead." });
+      }
+    } catch {
+      toast({ title: "Could not check this question", description: "The AI Brain is unreachable right now — submit the section for the full report instead." });
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  const handleNext = () => {
+    if (isLast) {
+      onSubmit(elapsed);
+      return;
+    }
+    setCurrentIndex((index) => Math.min(index + 1, session.items.length - 1));
+  };
+
+  const handlePrev = () => setCurrentIndex((index) => Math.max(index - 1, 0));
+
+  const skipTo = (index: number) => setCurrentIndex(Math.max(0, Math.min(index, session.items.length - 1)));
 
   return (
     <div>
@@ -352,7 +406,7 @@ function PracticeWorkbench({
           </div>
           <div className="min-w-40">
             <div className="flex justify-between text-xs font-bold text-[#315149]">
-              <span>Section completion</span>
+              <span>Checked {checkedCount}/{session.items.length}</span>
               <span>{progress}%</span>
             </div>
             <div className="mt-2 h-2 rounded-full bg-[#d8c8a8]/70">
@@ -364,20 +418,81 @@ function PracticeWorkbench({
 
       {session.module === "listening" ? <ListeningPanel session={session} /> : null}
 
-      <div className="mt-5 space-y-4">
-        {session.items.map((item, index) => (
-          <PracticeQuestion
-            key={item.id}
-            item={item}
-            index={index}
-            module={session.module}
-            value={answers[item.id] ?? ""}
-            onAnswer={onAnswer}
-          />
-        ))}
+      <div className="mt-5 flex flex-wrap items-center gap-2">
+        {session.items.map((item, index) => {
+          const feedbackItem = checkedFeedback[item.id];
+          const answered = Boolean((answers[item.id] ?? "").trim());
+          const state = feedbackItem
+            ? feedbackItem.isCorrect
+              ? "correct"
+              : "wrong"
+            : answered
+              ? "answered"
+              : "idle";
+          return (
+            <button
+              key={item.id}
+              onClick={() => skipTo(index)}
+              title={`Question ${index + 1}`}
+              className={cn(
+                "grid h-9 w-9 place-items-center rounded-xl text-xs font-black transition",
+                index === currentIndex && "ring-2 ring-[#17342f] ring-offset-2 ring-offset-[#fffaf0]",
+                state === "correct" && "bg-[#e4f0ea] text-[#2f7151]",
+                state === "wrong" && "bg-[#f8e8e2] text-[#a2532e]",
+                state === "answered" && "bg-[#f5eddc] text-[#8b5732]",
+                state === "idle" && "bg-[#17342f]/8 text-[#315149]",
+              )}
+            >
+              {index + 1}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mt-4 space-y-4">
+        <PracticeQuestion
+          key={currentItem.id}
+          item={currentItem}
+          index={currentIndex}
+          module={session.module}
+          value={currentValue}
+          onAnswer={handleAnswer}
+          locked={Boolean(currentFeedback)}
+        />
+        {currentFeedback ? <QuestionFeedbackCard feedback={currentFeedback} module={session.module} /> : null}
       </div>
 
       <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+        {currentIndex > 0 ? (
+          <button
+            onClick={handlePrev}
+            className="inline-flex items-center justify-center gap-2 rounded-2xl border border-[#d8c8a8] bg-white/80 px-5 py-3 text-sm font-bold text-[#17342f] transition hover:bg-white"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Previous
+          </button>
+        ) : null}
+        {!currentFeedback ? (
+          <button
+            onClick={handleCheck}
+            disabled={!currentValue.trim() || checking}
+            className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-[#17342f] px-5 py-3 text-sm font-bold text-white shadow-lg shadow-[#17342f]/20 transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {checking ? "Checking…" : "Check answer"}
+            <CheckCircle2 className="h-4 w-4" />
+          </button>
+        ) : (
+          <button
+            onClick={handleNext}
+            className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-[#17342f] px-5 py-3 text-sm font-bold text-white shadow-lg shadow-[#17342f]/20 transition hover:-translate-y-0.5"
+          >
+            {isLast ? "Finish & get full report" : `Next question (${currentIndex + 2}/${session.items.length})`}
+            <ArrowRight className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+
+      <div className="mt-3 flex flex-col gap-3 sm:flex-row">
         <button
           onClick={onUseSample}
           className="inline-flex items-center justify-center gap-2 rounded-2xl border border-[#d8c8a8] bg-white/80 px-5 py-3 text-sm font-bold text-[#17342f] transition hover:bg-white"
@@ -387,7 +502,7 @@ function PracticeWorkbench({
         </button>
         <button
           onClick={() => onSubmit(elapsed)}
-          className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-[#17342f] px-5 py-3 text-sm font-bold text-white shadow-lg shadow-[#17342f]/20 transition hover:-translate-y-0.5"
+          className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl border border-[#17342f]/20 bg-[#17342f]/5 px-5 py-3 text-sm font-bold text-[#17342f] transition hover:bg-[#17342f]/10"
         >
           Submit selected section
           <CheckCircle2 className="h-4 w-4" />
@@ -398,6 +513,69 @@ function PracticeWorkbench({
       {evaluation && (session.module === "reading" || session.module === "listening" || session.module === "writing" || session.module === "speaking") ? (
         <AnswerKeyPanel session={session} answers={answers} evaluation={evaluation} />
       ) : null}
+    </div>
+  );
+}
+
+function QuestionFeedbackCard({ feedback, module }: { feedback: ItemFeedback; module: Skill }) {
+  const detail = feedback.feedback;
+  const correct = feedback.isCorrect;
+  return (
+    <div className={cn("rounded-[2rem] border p-5", correct ? "border-[#cdddcf] bg-[#eff7ef]" : "border-[#eed9cf] bg-[#fdf3ec]")}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex items-center gap-3">
+          {correct ? (
+            <CheckCircle2 className="h-8 w-8 text-[#2f7151]" />
+          ) : (
+            <XCircle className="h-8 w-8 text-[#a2532e]" />
+          )}
+          <div>
+            <p className={cn("text-xs font-black uppercase tracking-[0.18em]", correct ? "text-[#2f7151]" : "text-[#a2532e]")}>
+              {detail.verdict}
+            </p>
+            <p className="mt-1 font-serif text-2xl font-semibold text-[#17342f]">
+              {module === "writing" || module === "speaking"
+                ? detail.estimatedBand
+                  ? `Estimated Band ${detail.estimatedBand.toFixed(1)}`
+                  : detail.verdict
+                : correct
+                  ? "Correct answer"
+                  : "Not quite — here is the answer"}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {module !== "writing" && module !== "speaking" && detail.idealAnswer ? (
+        <div className="mt-4 rounded-2xl bg-[#e4f0ea] p-4">
+          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#2f7151]">Correct answer</p>
+          <p className="mt-1.5 text-sm font-bold leading-6 text-[#2f7151]">{detail.idealAnswer}</p>
+        </div>
+      ) : null}
+
+      <div className="mt-4 space-y-3">
+        <AnswerRow icon={<Sparkles className="h-4 w-4 text-[#8b6f39]" />} label="Explanation" text={detail.explanation} />
+        <AnswerRow icon={<ListChecks className="h-4 w-4 text-[#8b6f39]" />} label="Logic" text={detail.logic} />
+        <AnswerRow icon={<Lightbulb className="h-4 w-4 text-[#8b6f39]" />} label="Tip" text={detail.tip} />
+        <AnswerRow icon={<Target className="h-4 w-4 text-[#8b6f39]" />} label="Suggestions" text={detail.suggestions} />
+        <AnswerRow icon={<TrendingUp className="h-4 w-4 text-[#8b6f39]" />} label="Band advice" text={detail.bandAdvice} />
+        {detail.criteria?.length ? (
+          <div className="rounded-2xl bg-[#fffdf7] p-3">
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#8b6f39]">IELTS criteria</p>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              {detail.criteria.map((criterion) => (
+                <div key={criterion.criterion} className="rounded-xl bg-white/80 p-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[11px] font-bold text-[#315149]">{criterion.criterion}</p>
+                    <span className="font-mono text-sm font-black text-[#17342f]">{criterion.band.toFixed(1)}</span>
+                  </div>
+                  {criterion.comment ? <p className="mt-1 text-xs leading-5 text-[#66746e]">{criterion.comment}</p> : null}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -435,12 +613,14 @@ export function PracticeQuestion({
   module,
   value,
   onAnswer,
+  locked = false,
 }: {
   item: PracticeItem;
   index: number;
   module: Skill;
   value: string;
   onAnswer: (id: string, value: string) => void;
+  locked?: boolean;
 }) {
   const isEssay = item.type === "essay";
   const targetWords = module === "writing" ? (item.title.includes("Task 1") ? 150 : 250) : 0;
@@ -471,12 +651,14 @@ export function PracticeQuestion({
           {item.options.map((option) => (
             <button
               key={option}
-              onClick={() => onAnswer(item.id, option)}
+              onClick={() => !locked && onAnswer(item.id, option)}
+              disabled={locked}
               className={cn(
                 "rounded-2xl border px-4 py-3 text-left text-sm font-bold transition",
                 value === option
                   ? "border-[#17342f] bg-[#17342f] text-white"
                   : "border-[#d8c8a8] bg-white/75 text-[#315149] hover:bg-white",
+                locked && "cursor-not-allowed opacity-60",
               )}
             >
               {option}
@@ -487,7 +669,8 @@ export function PracticeQuestion({
         <div>
           <textarea
             value={value}
-            onChange={(event) => onAnswer(item.id, event.target.value)}
+            onChange={(event) => !locked && onAnswer(item.id, event.target.value)}
+            readOnly={locked}
             rows={item.type === "essay" ? 8 : 4}
             placeholder={
               "Type your full answer here. The AI evaluates after you submit the selected section."
@@ -510,7 +693,13 @@ export function PracticeQuestion({
 
       {module === "speaking" ? (
         <div className="mt-4">
-          <VoiceRecorder onTranscript={(text) => text && onAnswer(item.id, text)} />
+          {locked ? (
+            <p className="rounded-2xl bg-[#e4f0ea] px-3 py-2 text-xs font-black uppercase tracking-[0.14em] text-[#2f7151]">
+              Response recorded — checking complete above.
+            </p>
+          ) : (
+            <VoiceRecorder onTranscript={(text) => text && onAnswer(item.id, text)} />
+          )}
         </div>
       ) : null}
 
