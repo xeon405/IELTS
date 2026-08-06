@@ -5,6 +5,7 @@ the built-in offline brain instead so every feature still works."""
 
 import hashlib
 import json
+import random
 import re
 import threading
 import time
@@ -37,8 +38,13 @@ def _throttle() -> None:
 
 
 def _retry_after(seconds: float, attempt: int) -> None:
-    wait = max(float(seconds), 1.0 * (attempt + 1))
+    # Cap the backoff so a single throttled call cannot stall a session for
+    # minutes; the caller falls back to the offline brain instead.
+    wait = min(max(float(seconds), 1.0 * (attempt + 1)), 4.0)
     time.sleep(wait)
+
+
+AI_CALL_DEADLINE_SECONDS = 10.0  # hard budget per generate call before offline fallback
 
 
 def _cache_key(prompt: str, system_instruction: str | None) -> str:
@@ -74,9 +80,29 @@ def is_ai_available() -> bool:
     return any(provider_configured(p) for p in ai_provider_order())
 
 
+def _split_keys(value: str) -> list[str]:
+    return [k.strip() for k in (value or "").replace(";", ",").split(",") if k.strip()]
+
+
+def groq_keys() -> list[str]:
+    """All configured Groq keys: explicit pool first, single key as fallback."""
+    keys = _split_keys(settings.GROQ_API_KEYS)
+    if not keys and settings.GROQ_API_KEY.strip():
+        keys = [settings.GROQ_API_KEY.strip()]
+    return keys
+
+
+def _pick_groq_key() -> str:
+    keys = groq_keys()
+    if not keys:
+        raise RuntimeError("Groq not configured")
+    # Random pick spreads free-tier 429 rate limits across the whole pool.
+    return random.choice(keys)
+
+
 def provider_configured(provider: str) -> bool:
     if provider == "groq":
-        return bool(settings.GROQ_API_KEY.strip())
+        return bool(groq_keys())
     if provider == "gemini":
         return settings.USE_GEMINI and bool(settings.GEMINI_API_KEY.strip())
     return False
@@ -141,24 +167,32 @@ def _extract_json(text: str) -> dict | list:
 
 
 def _groq_generate_text(prompt: str, system_instruction: str | None) -> str:
-    if not provider_configured("groq"):
+    if not groq_keys():
         raise RuntimeError("Groq not configured")
-    headers = {"Authorization": f"Bearer {settings.GROQ_API_KEY}", "Content-Type": "application/json"}
     messages = []
     if system_instruction:
         messages.append({"role": "system", "content": system_instruction})
     messages.append({"role": "user", "content": prompt})
-    timeout = httpx.Timeout(settings.GROQ_TIMEOUT_SECONDS)
     last_error: Exception | None = None
     max_tokens = int(settings.GROQ_MAX_TOKENS)
-    with httpx.Client(timeout=timeout) as client:
+    deadline = time.monotonic() + AI_CALL_DEADLINE_SECONDS
+    with httpx.Client() as client:
         for model in (settings.GROQ_MODEL, settings.GROQ_FALLBACK_MODEL):
             for attempt in range(3):
+                if time.monotonic() >= deadline:
+                    raise RuntimeError("Groq call exceeded the AI deadline; using offline brain")
                 _throttle()
                 try:
+                    # Random key per attempt: retries spread across the pool too.
+                    headers = {"Authorization": f"Bearer {_pick_groq_key()}", "Content-Type": "application/json"}
+                    # Shrink the per-request timeout to the remaining deadline so
+                    # a hung provider cannot stall a session for 20s.
+                    budget = max(4.0, min(float(settings.GROQ_TIMEOUT_SECONDS), deadline - time.monotonic()))
+                    timeout = httpx.Timeout(budget)
                     response = client.post(
                         GROQ_URL,
                         headers=headers,
+                        timeout=timeout,
                         json={
                             "model": model,
                             "messages": messages,
@@ -203,16 +237,20 @@ def _gemini_generate_text(prompt: str, system_instruction: str | None) -> str:
         body["systemInstruction"] = {"parts": [{"text": system_instruction}]}
     headers = {"x-goog-api-key": settings.GEMINI_API_KEY, "Content-Type": "application/json"}
     models = [settings.GEMINI_MODEL, settings.GEMINI_FALLBACK_MODEL]
-    timeout = httpx.Timeout(settings.GEMINI_TIMEOUT_SECONDS)
     last_error: Exception | None = None
-    with httpx.Client(timeout=timeout) as client:
+    deadline = time.monotonic() + AI_CALL_DEADLINE_SECONDS
+    with httpx.Client() as client:
         for model in models:
             for attempt in range(2):
+                if time.monotonic() >= deadline:
+                    raise RuntimeError("Gemini call exceeded the AI deadline; using offline brain")
                 _throttle()
                 try:
+                    budget = max(4.0, min(float(settings.GEMINI_TIMEOUT_SECONDS), deadline - time.monotonic()))
                     response = client.post(
                         GEMINI_URL.format(model=model),
                         headers=headers,
+                        timeout=httpx.Timeout(budget),
                         json=body,
                     )
                     if response.status_code in (429, 500, 502, 503, 504):

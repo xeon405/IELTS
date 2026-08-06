@@ -19,6 +19,7 @@ from . import listening_bank
 from . import writing_bank
 from . import speaking_bank
 from . import large_bank
+from ..config import settings
 
 SKILLS = ("reading", "listening", "writing", "speaking")
 
@@ -602,7 +603,11 @@ def generate_session(profile: dict | None, module: str, mode: str, count: int | 
     ]
 
     session: dict
-    if gemini.is_ai_available():
+    # Full sections ask the AI for up to 40 fresh items in ONE call, which
+    # always exceeds the provider output-token cap and fails slowly. Large
+    # sessions (mocks, full sections) use the offline banks directly: they are
+    # instant, and each bank holds ~500 items per type so nothing repeats.
+    if gemini.is_ai_available() and count <= settings.AI_MAX_ITEMS_PER_CALL:
         try:
             items = gemini.generate_json(_gemini_session_prompt(module, mode, count, profile), system_instruction="You generate original IELTS-style practice material only. Output valid JSON.", use_cache=False)
             if isinstance(items, dict):
