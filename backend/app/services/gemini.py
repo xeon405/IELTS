@@ -119,6 +119,27 @@ def _strip_code_fences(text: str) -> str:
     return match.group(0) if match else text
 
 
+def _extract_json(text: str) -> dict | list:
+    """Parse the JSON payload from model output that may carry trailing prose."""
+    raw = text.strip()
+    fences = re.findall(r"```(?:json)?\s*(.*?)```", raw, flags=re.DOTALL)
+    if fences:
+        raw = fences[-1].strip()
+    candidates: list[str] = [raw]
+    start, end = raw.find("["), raw.rfind("]")
+    if start != -1 and end > start:
+        candidates.append(raw[start : end + 1])
+    start, end = raw.find("{"), raw.rfind("}")
+    if start != -1 and end > start:
+        candidates.append(raw[start : end + 1])
+    for candidate in candidates:
+        try:
+            return json.loads(candidate)
+        except (json.JSONDecodeError, ValueError):
+            continue
+    raise ValueError("Model output contained no valid JSON")
+
+
 def _groq_generate_text(prompt: str, system_instruction: str | None) -> str:
     if not provider_configured("groq"):
         raise RuntimeError("Groq not configured")
@@ -129,9 +150,10 @@ def _groq_generate_text(prompt: str, system_instruction: str | None) -> str:
     messages.append({"role": "user", "content": prompt})
     timeout = httpx.Timeout(settings.GROQ_TIMEOUT_SECONDS)
     last_error: Exception | None = None
+    max_tokens = int(settings.GROQ_MAX_TOKENS)
     with httpx.Client(timeout=timeout) as client:
         for model in (settings.GROQ_MODEL, settings.GROQ_FALLBACK_MODEL):
-            for attempt in range(2):
+            for attempt in range(3):
                 _throttle()
                 try:
                     response = client.post(
@@ -141,9 +163,14 @@ def _groq_generate_text(prompt: str, system_instruction: str | None) -> str:
                             "model": model,
                             "messages": messages,
                             "temperature": 0.8,
-                            "max_tokens": settings.GROQ_MAX_TOKENS,
+                            "max_tokens": max_tokens,
                         },
                     )
+                    if response.status_code == 413:
+                        if max_tokens > 512:
+                            max_tokens = max(512, max_tokens // 2)
+                            raise RuntimeError(f"HTTP 413 from Groq model {model} (shrank to {max_tokens})")
+                        raise RuntimeError(f"HTTP 413 from Groq model {model}")
                     if response.status_code in (429, 500, 502, 503, 504):
                         retry_after = float(response.headers.get("retry-after") or 0)
                         raise RuntimeError(f"HTTP {response.status_code} from Groq model {model}:{retry_after}")
@@ -154,7 +181,7 @@ def _groq_generate_text(prompt: str, system_instruction: str | None) -> str:
                         return text.strip()
                 except Exception as exc:  # noqa: BLE001
                     last_error = exc
-                    if isinstance(exc, RuntimeError) and re.search(r"HTTP (429|500|502|503|504)", str(exc)):
+                    if isinstance(exc, RuntimeError) and re.search(r"HTTP (413|429|500|502|503|504)", str(exc)):
                         match = re.search(r":([\d.]+)$", str(exc))
                         _retry_after(float(match.group(1) or 0) if match else 0, attempt)
                     else:
@@ -210,13 +237,14 @@ def _gemini_generate_text(prompt: str, system_instruction: str | None) -> str:
     raise RuntimeError(f"Gemini request failed: {last_error}")
 
 
-def generate_text(prompt: str, system_instruction: str | None = None) -> str:
+def generate_text(prompt: str, system_instruction: str | None = None, use_cache: bool = True) -> str:
     if not is_ai_available():
         raise RuntimeError("No AI provider configured")
     key = _cache_key(prompt, system_instruction)
-    cached = _cache_get(key)
-    if cached is not None:
-        return cached
+    if use_cache:
+        cached = _cache_get(key)
+        if cached is not None:
+            return cached
     last_error: Exception | None = None
     for provider in ai_provider_order():
         try:
@@ -233,10 +261,9 @@ def generate_text(prompt: str, system_instruction: str | None = None) -> str:
     raise RuntimeError(f"All AI providers failed: {last_error}")
 
 
-def generate_json(prompt: str, system_instruction: str | None = None) -> dict | list:
-    text = generate_text(prompt, system_instruction)
-    cleaned = _strip_code_fences(text)
-    return json.loads(cleaned)
+def generate_json(prompt: str, system_instruction: str | None = None, use_cache: bool = True) -> dict | list:
+    text = generate_text(prompt, system_instruction, use_cache=use_cache)
+    return _extract_json(text)
 
 
 def chat(prompt: str) -> str:

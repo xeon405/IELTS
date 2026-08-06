@@ -17,5 +17,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "A question is required." }, { status: 400 });
   }
 
-  return NextResponse.json(tutorReply(profile, question));
+  return NextResponse.json({ ...tutorReply(profile, question), source: "offline" });
 }

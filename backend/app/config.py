@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     GROQ_MODEL: str = "llama-3.3-70b-versatile"
     GROQ_FALLBACK_MODEL: str = "llama-3.1-8b-instant"
     GROQ_TIMEOUT_SECONDS: float = 20.0
-    GROQ_MAX_TOKENS: int = 8192
+    GROQ_MAX_TOKENS: int = 4096
 
     CORS_ORIGINS: str = "http://localhost:4000,http://localhost:3000"
 

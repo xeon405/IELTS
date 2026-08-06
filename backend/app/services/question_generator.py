@@ -8,6 +8,7 @@ Pipeline: load profile -> history -> analyse bands -> detect weaknesses ->
 choose skill/type/topic/difficulty -> consult knowledge base -> build prompt
 -> Gemini -> validate -> return session. Every step is visible in `pipeline`."""
 
+import random
 import re
 from typing import Any
 
@@ -379,6 +380,9 @@ def _build_fallback_session(module: str, mode: str, count: int, bands: dict, tes
         pool = speaking_bank.items_for_mode(mode)
         bank = pool if pool else bank
 
+    bank = list(bank)
+    random.shuffle(bank)
+
     for index in range(count):
         base = bank[index % max(1, len(bank))]
         topic = topics[(index * 7 + index // max(1, len(bank))) % len(topics)]
@@ -597,7 +601,7 @@ def generate_session(profile: dict | None, module: str, mode: str, count: int | 
     session: dict
     if gemini.is_ai_available():
         try:
-            items = gemini.generate_json(_gemini_session_prompt(module, mode, count, profile), system_instruction="You generate original IELTS-style practice material only. Output valid JSON.")
+            items = gemini.generate_json(_gemini_session_prompt(module, mode, count, profile), system_instruction="You generate original IELTS-style practice material only. Output valid JSON.", use_cache=False)
             if isinstance(items, dict):
                 items = [items]
             items = _validate_items(items if isinstance(items, list) else [])
@@ -607,7 +611,8 @@ def generate_session(profile: dict | None, module: str, mode: str, count: int | 
             if len(items) < count:
                 fallback_session = _build_fallback_session(module, mode, count, bands, profile_test_type(profile))
                 existing_titles = {str(it.get("title") or "").lower() for it in items}
-                filler_pool = fallback_session.get("items", [])
+                filler_pool = list(fallback_session.get("items", []))
+                random.shuffle(filler_pool)
                 filler_index = 0
                 while len(items) < count and filler_pool:
                     filler = dict(filler_pool[filler_index % len(filler_pool)])

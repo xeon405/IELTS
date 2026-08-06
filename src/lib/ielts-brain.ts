@@ -2201,6 +2201,7 @@ export interface TutorMessage {
 export interface TutorReply {
   reply: string;
   tips: string[];
+  source?: string;
 }
 
 const tutorKnowledge: { keywords: string[]; reply: string; tips: string[] }[] = [

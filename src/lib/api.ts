@@ -160,10 +160,10 @@ export const brainApi = {
       () => postJSON<MockResponse>("/api/brain/mock", { profile, answers, timing }),
     );
   },
-  tutor(profile: StudentLearningProfile, question: string): Promise<TutorReply> {
+  tutor(profile: StudentLearningProfile, question: string, history?: { role: string; text: string }[]): Promise<TutorReply> {
     return brainCall(
-      () => backendFetch<TutorReply>("/brain/tutor", { profile, question }),
-      () => postJSON<TutorReply>("/api/brain/tutor", { profile, question }),
+      () => backendFetch<TutorReply>("/brain/tutor", { profile, question, history }),
+      () => postJSON<TutorReply>("/api/brain/tutor", { profile, question, history }),
     );
   },
   vocab(seenWords: string[]): Promise<VocabResponse> {

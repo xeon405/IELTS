@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Brain, Lightbulb, Send, Sparkles } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { brainApi } from "@/lib/api";
 import type { StudentLearningProfile, TutorMessage } from "@/lib/ielts-brain";
 
 const suggestionChips = [
@@ -33,13 +34,7 @@ export function TutorChat({ profile }: { profile: StudentLearningProfile }) {
     setLoading(true);
     try {
       const history = messages.slice(-6).map((message) => ({ role: message.role, text: message.text }));
-      const response = await fetch("/api/brain/tutor", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ profile, question, history }),
-      });
-      if (!response.ok) throw new Error("Tutor request failed");
-      const data = (await response.json()) as { reply: string; tips: string[]; source?: string };
+      const data = await brainApi.tutor(profile, question, history);
       setSource(data.source === "offline" ? "offline" : "ai");
       setMessages((current) => [
         ...current,
