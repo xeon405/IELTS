@@ -81,14 +81,15 @@ def is_ai_available() -> bool:
 
 
 def _split_keys(value: str) -> list[str]:
-    return [k.strip() for k in (value or "").replace(";", ",").split(",") if k.strip()]
+    parts = (value or "").replace(";", ",").replace("\n", ",").replace("\r", ",")
+    return [k.strip() for k in parts.split(",") if k.strip()]
 
 
 def groq_keys() -> list[str]:
     """All configured Groq keys: explicit pool first, single key as fallback."""
     keys = _split_keys(settings.GROQ_API_KEYS)
     if not keys and settings.GROQ_API_KEY.strip():
-        keys = [settings.GROQ_API_KEY.strip()]
+        keys = _split_keys(settings.GROQ_API_KEY)
     return keys
 
 

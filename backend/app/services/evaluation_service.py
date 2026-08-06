@@ -23,10 +23,20 @@ OBJECTIVE_TYPES = ("multiple-choice", "true-false", "yes-no-not-given", "sentenc
 SUBJECTIVE_TYPES = ("essay", "speaking-cue")
 
 
+def _as_text(value: object) -> str:
+    """Coerce a stored answer value (str, list of letters, or dict) to text."""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (list, tuple)):
+        return " ".join(str(v) for v in value)
+    if isinstance(value, dict):
+        return str(value.get("value") or value.get("text") or value.get("label") or value)
+    return str(value or "")
+
+
 def _normalize(text: str) -> str:
-    text = (text or "").strip().lower()
-    text = re.sub(r"[.,;:'\"!?()\[\]]", "", text)
-    return re.sub(r"\s+", " ", text).strip()
+    text = _as_text(text).strip().lower()
+    return re.sub(r"\s+", " ", re.sub(r"[.,;:'\"!?()\[\]]", "", text)).strip()
 
 
 band_from_accuracy = bp.band_from_accuracy
@@ -462,6 +472,45 @@ Band must be a half-band number between 3.5 and 9.0."""
         return None
 
 
+def _gemini_objective_estimate(
+    module: str,
+    accuracy: int,
+    objective_accuracy: int,
+    wrong_by_type: dict[str, int],
+    skill_results: list[dict],
+) -> dict | None:
+    """AI examiner pass for objective skills (reading/listening) that blends
+    the measured accuracy with a human-style band estimate and feedback."""
+    if not gemini.is_gemini_available():
+        return None
+    wrong_types = ", ".join(f"{t} ({c})" for t, c in sorted(wrong_by_type.items(), key=lambda kv: -kv[1])) or "none"
+    prompt_block = f"""You are an IELTS examiner. Evaluate a completed IELTS {module} practice session scored objectively.
+
+Session performance:
+- Overall accuracy: {accuracy}%
+- Objective question accuracy: {objective_accuracy}%
+- Question types with errors: {wrong_by_type or 'none'}
+- Questions attempted: {len(skill_results)}
+
+The objective score is authoritative. Your job is to confirm or refine the band and
+explain WHY the student performed this way so they can improve.
+
+Return ONLY JSON, no prose, with keys:
+{{"band": number, "summary": "2-3 sentence examiner summary", "strengths": ["..."], "weaknesses": ["..."], "nextPlan": ["..."], "bandDescriptorNotes": ["..."]}}
+Band must be a half-band number between 3.5 and 9.0, and should stay close to the objective accuracy (e.g. 65% object accuracy ≈ Band 6.0)."""
+    try:
+        data = gemini.generate_json(prompt_block, system_instruction="You are a strict but fair IELTS examiner. Output valid JSON only.")
+        if not isinstance(data, dict) or not data.get("band"):
+            return None
+        data["band"] = float(data["band"])
+        for key in ("strengths", "weaknesses", "nextPlan", "bandDescriptorNotes"):
+            if not isinstance(data.get(key), list):
+                data[key] = [str(data.get(key, ""))]
+        return data
+    except Exception:
+        return None
+
+
 def evaluate_session(db: Session, user: models.User, profile: models.StudentProfile, session_data: dict, answers: dict[str, str], timing: dict | None = None) -> dict:
     module = str(session_data.get("module") or "reading")
     items = session_data.get("items") or []
@@ -495,6 +544,14 @@ def evaluate_session(db: Session, user: models.User, profile: models.StudentProf
         gemini_data = _gemini_band_estimate(module, joined, " ".join(str(i.get("prompt", "")) for i in items)[:500])
         if gemini_data:
             predicted_band = round_band(gemini_data.get("band", predicted_band))
+            accuracy = round((predicted_band / 9) * 100)
+    elif module in ("reading", "listening") and scored:
+        # Hybrid evaluation: the objective accuracy is authoritative, and the
+        # AI examiner confirms the band and explains the result in feedback.
+        gemini_data = _gemini_objective_estimate(module, accuracy, objective_accuracy, wrong_by_type, skill_results)
+        if gemini_data:
+            ai_band = round_band(float(gemini_data.get("band", predicted_band)))
+            predicted_band = round_band(0.5 * predicted_band + 0.5 * ai_band)
             accuracy = round((predicted_band / 9) * 100)
 
     strengths: list[str] = []
