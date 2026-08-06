@@ -18,6 +18,7 @@ from . import reading_bank
 from . import listening_bank
 from . import writing_bank
 from . import speaking_bank
+from . import large_bank
 
 SKILLS = ("reading", "listening", "writing", "speaking")
 
@@ -363,22 +364,24 @@ def _build_fallback_session(module: str, mode: str, count: int, bands: dict, tes
     items: list[dict] = []
 
     if module == "reading":
-        pool = reading_bank.items_for_mode(mode)
-        bank = pool if pool else bank
+        pool = large_bank.items_for_mode("reading", mode) or reading_bank.items_for_mode(mode)
+        bank = pool
     elif module == "listening":
-        pool = listening_bank.items_for_mode(mode)
-        bank = pool if pool else bank
+        pool = large_bank.items_for_mode("listening", mode) or listening_bank.items_for_mode(mode)
+        bank = pool
     elif module == "writing":
-        pool = writing_bank.items_for_mode(mode)
+        pool = large_bank.items_for_mode("writing", mode)
         if mode == "Full Writing Section" and count >= 2:
-            data_pool = writing_bank.items_for_type("Task 1 Report (Data)") or pool
-            essay_pool = writing_bank.WRITING_BY_TYPE.get("Task 2 Opinion") or pool
-            bank = [data_pool[0], essay_pool[0]]
+            data_pool = large_bank.items_for_type("writing", "Task 1 Report (Data)") or writing_bank.items_for_type("Task 1 Report (Data)")
+            essay_pool = large_bank.items_for_type("writing", "Task 2 Opinion") or writing_bank.WRITING_BY_TYPE.get("Task 2 Opinion")
+            data_item = random.choice(data_pool) if data_pool else None
+            essay_item = random.choice(essay_pool) if essay_pool else None
+            bank = [x for x in (data_item, essay_item) if x] or pool
         else:
-            bank = pool if pool else bank
+            bank = pool or writing_bank.items_for_mode(mode)
     elif module == "speaking":
-        pool = speaking_bank.items_for_mode(mode)
-        bank = pool if pool else bank
+        pool = large_bank.items_for_mode("speaking", mode) or speaking_bank.items_for_mode(mode)
+        bank = pool
 
     bank = list(bank)
     random.shuffle(bank)
