@@ -8,7 +8,9 @@ import smtplib
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
+from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
 from .. import models
@@ -18,6 +20,7 @@ from ..schemas import (
     AuthResponse,
     ForgotPasswordRequest,
     ForgotResponse,
+    GoogleLoginRequest,
     LoginRequest,
     RegisterRequest,
     RegisterResponse,
@@ -39,6 +42,9 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 VERIFY_CODE_MINUTES = 1440  # 24 hours
 
+GOOGLE_JWKS_URL = "https://www.googleapis.com/oauth2/v3/certs"
+GOOGLE_ISSUERS = ("https://accounts.google.com", "accounts.google.com")
+
 
 def _auth_payload(db: Session, user: models.User, first_login: bool) -> AuthResponse:
     profile = get_or_create_profile(db, user)
@@ -52,6 +58,86 @@ def _auth_payload(db: Session, user: models.User, first_login: bool) -> AuthResp
     )
 
 
+def _complete_login(db: Session, user: models.User) -> AuthResponse:
+    """Mark first-login redirect, then return the auth payload."""
+    profile = get_or_create_profile(db, user)
+    first_login = not profile.first_login_redirected
+    if first_login:
+        profile.first_login_redirected = True
+        db.commit()
+    return _auth_payload(db, user, first_login=first_login)
+
+
+def _verify_google_credential(credential: str, client_id: str | None) -> dict:
+    """Verify a Google Identity Services ID token against Google's public keys."""
+    expected_audience = client_id or settings.GOOGLE_CLIENT_ID
+    if not expected_audience:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Google Sign-In is not configured on this server yet.")
+    try:
+        unverified = jwt.get_unverified_header(credential)
+        kid = unverified.get("kid")
+        with httpx.Client(timeout=10) as client:
+            response = client.get(GOOGLE_JWKS_URL)
+            response.raise_for_status()
+        keys = response.json().get("keys", [])
+        key = next((entry for entry in keys if entry.get("kid") == kid), None)
+        if key is None:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Google token could not be verified (key not found).")
+        claims = jwt.decode(
+            credential,
+            key,
+            algorithms=["RS256"],
+            audience=expected_audience,
+            issuer=GOOGLE_ISSUERS,
+        )
+    except JWTError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Google token is invalid or expired.") from exc
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[google] token verification failed: %s", exc)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Google token could not be verified.") from exc
+    if not claims.get("email"):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Google account has no verified email address.")
+    return claims
+
+
+@router.post("/google", response_model=AuthResponse)
+def google_login(
+    payload: GoogleLoginRequest,
+    db: Session = Depends(get_db),
+    _: None = Depends(rate_limit("auth-google", settings.RATE_LIMIT_LOGIN_MAX, settings.RATE_LIMIT_WINDOW_SECONDS)),
+):
+    """Sign in or sign up with a Google ID token (Google Identity Services)."""
+    claims = _verify_google_credential(payload.credential, payload.client_id)
+    email = str(claims.get("email") or "").strip().lower()
+    google_sub = str(claims.get("sub") or "")
+    if not email:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Google account has no email address.")
+
+    user = db.query(models.User).filter(models.User.email == email).first()
+    if user is None:
+        name = str(claims.get("name") or "").strip() or email.split("@")[0]
+        user = models.User(
+            email=email,
+            full_name=name,
+            hashed_password=hash_password(secrets.token_urlsafe(24)),
+            google_sub=google_sub,
+            email_verified=True,
+        )
+        db.add(user)
+        db.flush()
+        db.add(models.StudentProfile(user_id=user.id))
+        db.add(models.Settings(user_id=user.id))
+        db.commit()
+        logger.info("[google] new user created: %s", email)
+    else:
+        user.email_verified = True
+        user.google_sub = google_sub
+        db.commit()
+    return _complete_login(db, user)
+
+
 def _verification_code() -> str:
     return f"{random.randint(0, 999999):06d}"
 
@@ -61,6 +147,24 @@ def _is_prod() -> bool:
 
 
 def _send_email(to_email: str, subject: str, body: str) -> bool:
+    if settings.RESEND_API_KEY:
+        try:
+            response = httpx.post(
+                "https://api.resend.com/emails",
+                headers={"Authorization": f"Bearer {settings.RESEND_API_KEY}"},
+                json={
+                    "from": settings.RESEND_FROM,
+                    "to": [to_email],
+                    "subject": subject,
+                    "text": body,
+                },
+                timeout=15,
+            )
+            if response.status_code < 400:
+                return True
+            logger.warning("[email] Resend API rejected: %s %s", response.status_code, response.text[:300])
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[email] Resend API send failed: %s", exc)
     if not settings.SMTP_HOST:
         logger.info(f"[dev] email to {to_email} ({subject}):\n{body}")
         return False
@@ -194,12 +298,7 @@ def login(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Email not verified. Please check your inbox for the verification code.",
         )
-    profile = get_or_create_profile(db, user)
-    first_login = not profile.first_login_redirected
-    if first_login:
-        profile.first_login_redirected = True
-        db.commit()
-    return _auth_payload(db, user, first_login=first_login)
+    return _complete_login(db, user)
 
 
 @router.get("/me", response_model=AuthResponse)

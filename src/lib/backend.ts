@@ -97,6 +97,13 @@ export const authApi = {
   resendVerification(email: string): Promise<ResendResponse> {
     return request<ResendResponse>("/auth/verify/resend", { method: "POST", body: JSON.stringify({ email }) }, false);
   },
+  google(credential: string, clientId?: string): Promise<AuthResponse> {
+    return request<AuthResponse>(
+      "/auth/google",
+      { method: "POST", body: JSON.stringify({ credential, client_id: clientId }) },
+      false,
+    );
+  },
   forgotPassword(email: string): Promise<{ message: string; reset_token?: string }> {
     return request("/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) }, false);
   },

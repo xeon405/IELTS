@@ -30,13 +30,20 @@ async def lifespan(app: FastAPI):
         columns = {column["name"] for column in inspector.get_columns("users")}
     except Exception:  # noqa: BLE001
         columns = set()
-    if columns and "email_verified" not in columns:
+    if columns:
         dialect = engine.dialect.name
         ts = "TIMESTAMPTZ" if dialect == "postgresql" else "DATETIME"
-        with engine.begin() as conn:
-            conn.exec_driver_sql("ALTER TABLE users ADD COLUMN email_verified BOOLEAN NOT NULL DEFAULT TRUE")
-            conn.exec_driver_sql("ALTER TABLE users ADD COLUMN verification_code VARCHAR(10)")
-            conn.exec_driver_sql(f"ALTER TABLE users ADD COLUMN verification_code_expires {ts}")
+        alterations = []
+        if "email_verified" not in columns:
+            alterations.append("ADD COLUMN email_verified BOOLEAN NOT NULL DEFAULT TRUE")
+            alterations.append("ADD COLUMN verification_code VARCHAR(10)")
+            alterations.append(f"ADD COLUMN verification_code_expires {ts}")
+        if "google_sub" not in columns:
+            alterations.append("ADD COLUMN google_sub VARCHAR(255)")
+        if alterations:
+            with engine.begin() as conn:
+                for clause in alterations:
+                    conn.exec_driver_sql(f"ALTER TABLE users {clause}")
     logger.info("startup complete (database=%s)", active_dialect())
     yield
     logger.info("shutdown complete")

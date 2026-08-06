@@ -19,6 +19,10 @@ class Settings(BaseSettings):
 
     FRONTEND_URL: str = "http://localhost:4000"
 
+    # Google Sign-In (Google Identity Services / OAuth 2.0)
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+
     RATE_LIMIT_LOGIN_MAX: int = 20
     RATE_LIMIT_WINDOW_SECONDS: int = 300
     RATE_LIMIT_VERIFY_MAX: int = 10
@@ -50,6 +54,10 @@ class Settings(BaseSettings):
     SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""
     SMTP_FROM: str = "IELTS Examiner <no-reply@ielts-examiner.local>"
+
+    # Resend (transactional email API) — used first when set, SMTP is the fallback.
+    RESEND_API_KEY: str = ""
+    RESEND_FROM: str = "IELTS Examiner <onboarding@resend.dev>"
 
 
 @lru_cache

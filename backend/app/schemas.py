@@ -15,6 +15,13 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class GoogleLoginRequest(BaseModel):
+    """A Google Identity Services credential (encoded JWT ID token)."""
+
+    credential: str = Field(min_length=20)
+    client_id: str | None = None
+
+
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
 
