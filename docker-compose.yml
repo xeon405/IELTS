@@ -1,0 +1,35 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: ielts_db
+    environment:
+      POSTGRES_USER: ielts
+      POSTGRES_PASSWORD: ielts_secret
+      POSTGRES_DB: ielts
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ielts -d ielts"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: ./backend
+    container_name: ielts_api
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://ielts:ielts_secret@db:5432/ielts
+      CORS_ORIGINS: http://localhost:4000,http://localhost:3000
+      FRONTEND_URL: http://localhost:4000
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

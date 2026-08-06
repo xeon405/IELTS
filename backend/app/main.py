@@ -1,0 +1,103 @@
+"""AI IELTS Examiner API entrypoint."""
+
+import logging
+from contextlib import asynccontextmanager
+
+import sqlalchemy
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+from .config import settings
+from .database import Base, engine, active_dialect
+from .middleware import RequestContextMiddleware
+from .routers import auth, brain, diagnostic
+
+logging.basicConfig(
+    level=getattr(logging, (settings.LOG_LEVEL or "INFO").upper(), logging.INFO),
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
+logger = logging.getLogger("uvicorn.error")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    Base.metadata.create_all(bind=engine)
+    inspector = sqlalchemy.inspect(engine)
+    try:
+        columns = {column["name"] for column in inspector.get_columns("users")}
+    except Exception:  # noqa: BLE001
+        columns = set()
+    if columns and "email_verified" not in columns:
+        dialect = engine.dialect.name
+        ts = "TIMESTAMPTZ" if dialect == "postgresql" else "DATETIME"
+        with engine.begin() as conn:
+            conn.exec_driver_sql("ALTER TABLE users ADD COLUMN email_verified BOOLEAN NOT NULL DEFAULT TRUE")
+            conn.exec_driver_sql("ALTER TABLE users ADD COLUMN verification_code VARCHAR(10)")
+            conn.exec_driver_sql(f"ALTER TABLE users ADD COLUMN verification_code_expires {ts}")
+    logger.info("startup complete (database=%s)", active_dialect())
+    yield
+    logger.info("shutdown complete")
+
+
+app = FastAPI(
+    title=settings.APP_NAME,
+    version="1.0.0",
+    lifespan=lifespan,
+    docs_url="/docs" if settings.APP_ENV != "production" else None,
+    redoc_url=None if settings.APP_ENV == "production" else None,
+)
+
+app.add_middleware(RequestContextMiddleware)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[origin.strip() for origin in settings.CORS_ORIGINS.split(",") if origin.strip()],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": str(exc.detail)},
+        headers={"X-Request-ID": request.headers.get("x-request-id", "")},
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    return JSONResponse(
+        status_code=422,
+        content={"detail": "Invalid request payload", "errors": exc.errors()},
+        headers={"X-Request-ID": request.headers.get("x-request-id", "")},
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    logger.exception("unhandled error on %s %s", request.method, request.url.path)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"},
+        headers={"X-Request-ID": request.headers.get("x-request-id", "")},
+    )
+
+
+app.include_router(auth.router, prefix=settings.API_PREFIX)
+app.include_router(brain.router, prefix=settings.API_PREFIX)
+app.include_router(diagnostic.router, prefix=settings.API_PREFIX)
+
+
+@app.get("/")
+def root():
+    return {"app": settings.APP_NAME, "docs": "/docs", "health": "/api/brain/health"}
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok", "database": active_dialect()}

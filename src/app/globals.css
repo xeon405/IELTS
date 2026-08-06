@@ -1,0 +1,265 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-plus-jakarta);
+  --font-serif: var(--font-fraunces);
+  --font-mono: var(--font-space-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root {
+  --radius: 0.625rem;
+  --background: oklch(0.96 0.027 82);
+  --foreground: oklch(0.22 0.047 177);
+  --card: oklch(0.99 0.011 89);
+  --card-foreground: oklch(0.22 0.047 177);
+  --popover: oklch(0.99 0.011 89);
+  --popover-foreground: oklch(0.22 0.047 177);
+  --primary: oklch(0.37 0.096 176);
+  --primary-foreground: oklch(0.985 0.01 92);
+  --secondary: oklch(0.89 0.043 78);
+  --secondary-foreground: oklch(0.25 0.057 174);
+  --muted: oklch(0.91 0.026 84);
+  --muted-foreground: oklch(0.46 0.035 184);
+  --accent: oklch(0.78 0.131 67);
+  --accent-foreground: oklch(0.2 0.045 177);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.83 0.033 82);
+  --input: oklch(0.86 0.034 82);
+  --ring: oklch(0.58 0.103 176);
+  --chart-1: oklch(0.53 0.115 178);
+  --chart-2: oklch(0.75 0.128 69);
+  --chart-3: oklch(0.48 0.086 220);
+  --chart-4: oklch(0.64 0.102 139);
+  --chart-5: oklch(0.63 0.158 43);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    min-height: 100vh;
+  }
+}
+
+@keyframes brain-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.72;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+}
+
+@keyframes soft-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slow-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  50% {
+    transform: translate3d(18px, -24px, 0) rotate(5deg);
+  }
+}
+
+.animate-brain-pulse {
+  animation: brain-pulse 3s ease-in-out infinite;
+}
+
+.animate-soft-rise {
+  animation: soft-rise 0.7s ease-out both;
+}
+
+.animate-slow-drift {
+  animation: slow-drift 12s ease-in-out infinite;
+}
+
+.exam-grid {
+  background-image:
+    linear-gradient(rgba(24, 64, 58, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(24, 64, 58, 0.08) 1px, transparent 1px);
+  background-size: 34px 34px;
+}
+
+/* Hide Next.js error overlay portal */
+nextjs-portal {
+  display: none !important;
+}
+
+/* ---- App theme (settings) ---- */
+[data-theme="warm"] main.exam-grid {
+  background-color: #f3e8d0;
+}
+
+[data-theme="warm"] [class*="bg-[#fffaf0]"] {
+  background-color: #fbf1dd;
+}
+
+[data-theme="dark"] main.exam-grid {
+  background-color: #0e1714;
+}
+
+[data-theme="dark"] main.exam-grid {
+  background-image:
+    linear-gradient(rgba(214, 235, 226, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(214, 235, 226, 0.05) 1px, transparent 1px);
+}
+
+[data-theme="dark"] [class*="bg-[#fffaf0]"] {
+  background-color: #131e1a;
+}
+
+[data-theme="dark"] [class*="bg-white"] {
+  background-color: #1b2722;
+}
+
+[data-theme="dark"] [class*="bg-[#fffdf7]"] {
+  background-color: #18231f;
+}
+
+[data-theme="dark"] [class*="text-[#17342f]"] {
+  color: #eaf2ed;
+}
+
+[data-theme="dark"] [class*="text-[#315149]"],
+[data-theme="dark"] [class*="text-[#34534d]"],
+[data-theme="dark"] [class*="text-[#4f625b]"],
+[data-theme="dark"] [class*="text-[#5b6b63]"],
+[data-theme="dark"] [class*="text-[#5c6b64]"],
+[data-theme="dark"] [class*="text-[#66746e]"],
+[data-theme="dark"] [class*="text-[#6d756f]"],
+[data-theme="dark"] [class*="text-[#6a5d4d]"],
+[data-theme="dark"] [class*="text-[#7c4a2c]"],
+[data-theme="dark"] [class*="text-[#a2532e]"] {
+  color: #a9bbb1;
+}
+
+[data-theme="dark"] [class*="text-[#8b6f39]"],
+[data-theme="dark"] [class*="text-[#8b5732]"],
+[data-theme="dark"] [class*="text-[#e3b65f]"] {
+  color: #e6c983;
+}
+
+[data-theme="dark"] [class*="text-[#8b8f88]"] {
+  color: #7f9086;
+}
+
+[data-theme="dark"] [class*="border-[#e3dac6]"],
+[data-theme="dark"] [class*="border-[#d8c8a8]"],
+[data-theme="dark"] [class*="border-[#d7cab0]"],
+[data-theme="dark"] [class*="border-[#bdd3c7]"] {
+  border-color: #2b3a33;
+}
+
+[data-theme="dark"] [class*="bg-[#17342f]"]:not([class*="shadow"]) {
+  background-color: #1e312b;
+}
+
+[data-theme="dark"] [class*="bg-[#e4f0ea]"],
+[data-theme="dark"] [class*="bg-[#eef7ef]"],
+[data-theme="dark"] [class*="bg-[#eff7ef]"],
+[data-theme="dark"] [class*="bg-[#edf7ef]"],
+[data-theme="dark"] [class*="bg-[#f8f0d9]"],
+[data-theme="dark"] [class*="bg-[#f8e5c8]"],
+[data-theme="dark"] [class*="bg-[#f7e3de]"],
+[data-theme="dark"] [class*="bg-[#f8e8e2]"],
+[data-theme="dark"] [class*="bg-[#e2ecf5]"],
+[data-theme="dark"] [class*="bg-[#e0f0e6]"],
+[data-theme="dark"] [class*="bg-[#f7e7d3]"],
+[data-theme="dark"] [class*="bg-[#ece4f5]"] {
+  background-color: #223029;
+}
