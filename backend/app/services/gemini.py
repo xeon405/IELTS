@@ -21,6 +21,25 @@ _CACHE_LOCK = threading.Lock()
 _CACHE_TTL_SECONDS = 15 * 60
 _CACHE_MAX = 128
 
+_RATE_LOCK = threading.Lock()
+_LAST_CALL_TS = 0.0
+
+
+def _throttle() -> None:
+    """Space out outgoing AI calls so bursty sessions stay under provider RPM limits."""
+    global _LAST_CALL_TS
+    interval = max(0.0, float(settings.AI_MIN_INTERVAL_SECONDS))
+    with _RATE_LOCK:
+        wait = _LAST_CALL_TS + interval - time.monotonic()
+        if wait > 0:
+            time.sleep(wait)
+        _LAST_CALL_TS = time.monotonic()
+
+
+def _retry_after(seconds: float, attempt: int) -> None:
+    wait = max(float(seconds), 1.0 * (attempt + 1))
+    time.sleep(wait)
+
 
 def _cache_key(prompt: str, system_instruction: str | None) -> str:
     return hashlib.sha256(f"{system_instruction or ''}|{prompt}".encode("utf-8")).hexdigest()
@@ -113,6 +132,7 @@ def _groq_generate_text(prompt: str, system_instruction: str | None) -> str:
     with httpx.Client(timeout=timeout) as client:
         for model in (settings.GROQ_MODEL, settings.GROQ_FALLBACK_MODEL):
             for attempt in range(2):
+                _throttle()
                 try:
                     response = client.post(
                         GROQ_URL,
@@ -125,7 +145,8 @@ def _groq_generate_text(prompt: str, system_instruction: str | None) -> str:
                         },
                     )
                     if response.status_code in (429, 500, 502, 503, 504):
-                        raise RuntimeError(f"HTTP {response.status_code} from Groq model {model}")
+                        retry_after = float(response.headers.get("retry-after") or 0)
+                        raise RuntimeError(f"HTTP {response.status_code} from Groq model {model}:{retry_after}")
                     response.raise_for_status()
                     data = response.json()
                     text = (data.get("choices") or [{}])[0].get("message", {}).get("content") or ""
@@ -134,7 +155,8 @@ def _groq_generate_text(prompt: str, system_instruction: str | None) -> str:
                 except Exception as exc:  # noqa: BLE001
                     last_error = exc
                     if isinstance(exc, RuntimeError) and re.search(r"HTTP (429|500|502|503|504)", str(exc)):
-                        time.sleep(1.5 * (attempt + 1))
+                        match = re.search(r":([\d.]+)$", str(exc))
+                        _retry_after(float(match.group(1) or 0) if match else 0, attempt)
                     else:
                         break
     raise RuntimeError(f"Groq request failed: {last_error}")
@@ -159,6 +181,7 @@ def _gemini_generate_text(prompt: str, system_instruction: str | None) -> str:
     with httpx.Client(timeout=timeout) as client:
         for model in models:
             for attempt in range(2):
+                _throttle()
                 try:
                     response = client.post(
                         GEMINI_URL.format(model=model),
@@ -166,7 +189,8 @@ def _gemini_generate_text(prompt: str, system_instruction: str | None) -> str:
                         json=body,
                     )
                     if response.status_code in (429, 500, 502, 503, 504):
-                        raise RuntimeError(f"HTTP {response.status_code} from model {model}")
+                        retry_after = float(response.headers.get("retry-after") or 0)
+                        raise RuntimeError(f"HTTP {response.status_code} from model {model}:{retry_after}")
                     response.raise_for_status()
                     data = response.json()
                     candidates = data.get("candidates") or []
@@ -179,7 +203,8 @@ def _gemini_generate_text(prompt: str, system_instruction: str | None) -> str:
                 except Exception as exc:  # noqa: BLE001
                     last_error = exc
                     if isinstance(exc, RuntimeError) and re.search(r"HTTP (429|500|502|503|504)", str(exc)):
-                        time.sleep(1.5 * (attempt + 1))
+                        match = re.search(r":([\d.]+)$", str(exc))
+                        _retry_after(float(match.group(1) or 0) if match else 0, attempt)
                     else:
                         break
     raise RuntimeError(f"Gemini request failed: {last_error}")

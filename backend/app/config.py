@@ -26,16 +26,17 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-2.5-flash"
     GEMINI_FALLBACK_MODEL: str = "gemini-2.5-flash-lite"
-    GEMINI_TIMEOUT_SECONDS: float = 60.0
+    GEMINI_TIMEOUT_SECONDS: float = 20.0
     GEMINI_MAX_OUTPUT_TOKENS: int = 4096
     USE_GEMINI: bool = True
 
     AI_PROVIDER: str = "auto"  # auto | groq | gemini | groq-only | gemini-only | offline
+    AI_MIN_INTERVAL_SECONDS: float = 1.2  # minimum spacing between outgoing AI calls (avoids free-tier 429s)
 
     GROQ_API_KEY: str = ""
     GROQ_MODEL: str = "llama-3.3-70b-versatile"
     GROQ_FALLBACK_MODEL: str = "llama-3.1-8b-instant"
-    GROQ_TIMEOUT_SECONDS: float = 60.0
+    GROQ_TIMEOUT_SECONDS: float = 20.0
     GROQ_MAX_TOKENS: int = 8192
 
     CORS_ORIGINS: str = "http://localhost:4000,http://localhost:3000"
