@@ -18,8 +18,9 @@ import { VocabularyTrainer } from "@/components/vocabulary-trainer";
 import { Onboarding } from "@/components/app/onboarding";
 
 import { brainApi } from "@/lib/api";
-import { authApi, getToken } from "@/lib/backend";
+import { authApi, clearAuth, getToken } from "@/lib/backend";
 import { computeTimingMetrics } from "@/lib/timing";
+import { advanceQuestionWindow, rotateFreshItems } from "@/lib/fresh-items";
 import {
   getSampleAnswers,
   isSkill,
@@ -61,6 +62,7 @@ export default function AppPage() {
   const [checkingOnboarding, setCheckingOnboarding] = useState(true);
   const [onboardingProfile, setOnboardingProfile] = useState<StudentLearningProfile | null>(null);
   const [activeView, setActiveView] = useState<ViewId>("dashboard");
+  const [menuOpen, setMenuOpen] = useState(true);
   const [session, setSession] = useState<PracticeSession | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [evaluation, setEvaluation] = useState<EvaluationResult | null>(null);
@@ -73,7 +75,10 @@ export default function AppPage() {
   const [lastSession, setLastSession] = useState<PracticeSession | null>(null);
   const [practiceLoading, setPracticeLoading] = useState(false);
   const mockTimingRef = useRef<Partial<Record<Skill, number>>>({});
+  const mockPaperRef = useRef(1);
   const preLaunchViewRef = useRef<ViewId>("dashboard");
+  const viewRef = useRef<ViewId>("dashboard");
+  viewRef.current = activeView;
 
   useEffect(() => {
     try {
@@ -218,12 +223,16 @@ export default function AppPage() {
       try {
         const isType = isQuestionTypeMode(module ?? "reading", mode);
         const response = await brainApi.createSession(profile, module, isType ? undefined : mode, isType ? mode : undefined);
-        preLaunchViewRef.current = activeView;
-        setSession(response.session);
+        const session = {
+          ...response.session,
+          items: rotateFreshItems(response.session.items, response.session.module, response.session.mode),
+        };
+        preLaunchViewRef.current = viewRef.current;
+        setSession(session);
         setAnswers({});
         setEvaluation(null);
-        setLastSession(response.session);
-        setActiveView(response.session.module);
+        setLastSession(session);
+        setActiveView(session.module);
       } catch (error) {
         toast({ title: "AI Brain unavailable", description: error instanceof Error ? error.message : "Could not generate a session." });
       } finally {
@@ -235,7 +244,7 @@ export default function AppPage() {
 
   const continuePractice = useCallback(() => {
     if (lastSession) {
-      preLaunchViewRef.current = activeView;
+      preLaunchViewRef.current = viewRef.current;
       setSession(lastSession);
       setAnswers({});
       setEvaluation(null);
@@ -259,6 +268,11 @@ export default function AppPage() {
     try {
       const timing = { totalSeconds: elapsedSeconds && elapsedSeconds > 0 ? elapsedSeconds : undefined };
       const response = await brainApi.evaluate(profile, session, answers, timing);
+      advanceQuestionWindow(
+        session.module,
+        session.mode,
+        Object.values(answers).filter((value) => (value ?? "").trim().length > 0).length,
+      );
       setEvaluation(response.evaluation);
       setProfile(response.updatedProfile);
       toast({
@@ -290,6 +304,15 @@ export default function AppPage() {
     toast({ title: "Demo memory reset", description: "Default student profile restored." });
   }, []);
 
+  const logout = useCallback(() => {
+    if (typeof window === "undefined") return;
+    clearAuth();
+    window.localStorage.removeItem("ielts_user");
+    window.localStorage.removeItem(storageKey);
+    window.localStorage.removeItem(lastSessionKey);
+    window.location.href = "/login";
+  }, []);
+
   const toggleVocabMastery = useCallback((id: string) => {
     setProfile((current) => {
       const mastered = current.vocabMastered ?? [];
@@ -306,30 +329,42 @@ export default function AppPage() {
     }));
   }, []);
 
-  const startMockExam = useCallback(async () => {
-    setMockGenerating(true);
-    setMockSections({});
-    setMockAnswers({});
-    setMockResult(null);
-    mockTimingRef.current = {};
-    setActiveView("mock");
-    try {
-      const settled = await Promise.allSettled(
-        skillOrder.map((skill) => brainApi.createSession(profile, skill, MOCK_FULL_MODES[skill])),
-      );
-      const built: Partial<Record<Skill, PracticeSession | null>> = {};
-      skillOrder.forEach((skill, index) => {
-        const outcome = settled[index];
-        built[skill] = outcome.status === "fulfilled" ? outcome.value.session : null;
-      });
-      setMockSections(built);
-    } catch {
+  const startMockExam = useCallback(
+    async (paperNumber?: number) => {
+      setMockGenerating(true);
       setMockSections({});
-    } finally {
-      setMockGenerating(false);
-      setMockSection("listening");
-    }
-  }, [profile]);
+      setMockAnswers({});
+      setMockResult(null);
+      mockTimingRef.current = {};
+      setActiveView("mock");
+      try {
+        const paperNo = paperNumber ?? mockPaperRef.current;
+        const paper = await brainApi.mockPaper(profile, paperNo);
+        mockPaperRef.current = paperNo;
+        const built: Partial<Record<Skill, PracticeSession | null>> = {};
+        skillOrder.forEach((skill) => {
+          const session = paper.paper.sections[skill];
+          built[skill] = session
+            ? {
+                ...session,
+                items: rotateFreshItems(session.items, skill, MOCK_FULL_MODES[skill]),
+              }
+            : null;
+        });
+        setMockSections(built);
+      } catch (error) {
+        setMockSections({});
+        toast({
+          title: "Mock paper unavailable",
+          description: error instanceof Error ? error.message : "The AI Brain could not print this paper. Is the backend running?",
+        });
+      } finally {
+        setMockGenerating(false);
+        setMockSection("listening");
+      }
+    },
+    [profile],
+  );
 
   const fillMockDemo = useCallback(() => {
     const filled: Record<string, string> = {};
@@ -368,6 +403,7 @@ export default function AppPage() {
           const response = await brainApi.evaluate(profile, session, sectionAnswers, timing);
           evals[skill] = response.evaluation;
           finalProfile = response.updatedProfile;
+          advanceQuestionWindow(skill, MOCK_FULL_MODES[skill], Object.keys(sectionAnswers).length);
         } catch {
           // skip a section that could not be evaluated
         }
@@ -515,6 +551,7 @@ export default function AppPage() {
           result={mockResult}
           loading={mockGenerating}
           sections={mockSections}
+          papersCount={10}
           onStart={startMockExam}
           onAnswer={(id, value) => setMockAnswers((current) => ({ ...current, [id]: value }))}
           onFillDemo={fillMockDemo}
@@ -558,9 +595,20 @@ export default function AppPage() {
         <div className="absolute bottom-[-14rem] left-1/3 h-[34rem] w-[34rem] rounded-full bg-[#e8c872]/25 blur-3xl" />
       </div>
 
-      <div className={cn("relative mx-auto flex w-full flex-col gap-5 px-4 py-4", inFullPractice ? "max-w-[1200px]" : "max-w-[1520px] lg:flex-row lg:px-6")}>
-        {inFullPractice ? null : <Sidebar activeView={activeView} setActiveView={setActiveView} profile={profile} onReset={resetDemo} />}
-        {inFullPractice ? null : <MobileNav activeView={activeView} setActiveView={setActiveView} />}
+      <div className={cn("relative mx-auto flex w-full flex-col gap-5 px-4 py-4", inFullPractice ? "max-w-[1200px]" : "max-w-[1520px] lg:px-6")}>
+        {inFullPractice ? null : <MobileNav activeView={activeView} setActiveView={setActiveView} onLogout={logout} />}
+
+        {inFullPractice ? null : (
+          <Sidebar
+            activeView={activeView}
+            setActiveView={setActiveView}
+            profile={profile}
+            onReset={resetDemo}
+            onLogout={logout}
+            open={menuOpen}
+            onClose={() => setMenuOpen(false)}
+          />
+        )}
 
         <section className="min-w-0 flex-1 space-y-5">
           {inFullPractice ? null : (
@@ -569,6 +617,7 @@ export default function AppPage() {
               recommendation={activeRecommendation}
               onAdaptive={() => launchPractice()}
               onMock={startMockExam}
+              onMenu={() => setMenuOpen(true)}
             />
           )}
           <div className="animate-soft-rise">{content}</div>

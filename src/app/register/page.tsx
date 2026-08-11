@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import AuthShell from "@/components/auth-shell";
 import GoogleSignIn from "@/components/google-sign-in";
-import { authApi, setAuth, clearAuth } from "@/lib/backend";
+import { authApi, setAuth, isAuthenticated } from "@/lib/backend";
 
 const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? "";
 
@@ -21,9 +21,10 @@ export default function RegisterPage() {
   const [error, setError] = useState("");
   const [verifiedEmail, setVerifiedEmail] = useState<string | null>(null);
 
-  useEffect(() => {
-    clearAuth();
-  }, []);
+  // Already signed in? Never wipe the session on mount (back arrow safety).
+  if (isAuthenticated()) {
+    router.replace("/app");
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,8 +37,8 @@ export default function RegisterPage() {
       setError("Please enter a valid email address.");
       return;
     }
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters.");
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters.");
       return;
     }
     if (password !== confirm) {
@@ -68,7 +69,7 @@ export default function RegisterPage() {
     try {
       const auth = await authApi.verify(verifiedEmail, code.trim());
       setAuth(auth.access_token, auth.profile);
-      router.push(auth.requires_diagnostic ? "/app" : "/app");
+      router.replace("/app");
     } catch (err) {
       setError(err instanceof Error ? err.message : "That code did not work. Try again.");
     } finally {
@@ -95,7 +96,7 @@ export default function RegisterPage() {
       try {
         const auth = await authApi.google(credential, GOOGLE_CLIENT_ID);
         setAuth(auth.access_token, auth.profile);
-        router.push("/app");
+        router.replace("/app");
       } catch (err) {
         setError(err instanceof Error ? err.message : "Google sign-in failed. Please try again.");
       } finally {
@@ -184,7 +185,7 @@ export default function RegisterPage() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="At least 6 characters"
+              placeholder="At least 8 characters"
               className="w-full rounded-xl border border-[#d8c8a8] bg-white px-4 py-3 text-sm outline-none transition focus:border-[#17342f]"
             />
           </Field>

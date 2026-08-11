@@ -56,7 +56,7 @@ export const moduleConfig: Record<
     ring: "ring-[#1d5f8f]/25",
     gradient: "from-[#d9e8f5] via-[#e6eef5] to-[#c9dfee]",
     description: "Passages and questions with blue focus: headings, inference, detail, and timing.",
-    modes: ["Full Reading Section", "Passage 1", "Passage 2", "Passage 3", "Individual Question Types", "Quick Practice"],
+    modes: ["Blueprint", "Full Reading Test", "Passage 1", "Passage 2", "Passage 3", "Practice by Question Type"],
   },
   listening: {
     label: "Listening",
@@ -66,7 +66,7 @@ export const moduleConfig: Record<
     ring: "ring-[#1e7d3d]/25",
     gradient: "from-[#d7ecdb] via-[#eaf0df] to-[#cfe6c8]",
     description: "Four-part listening practice with green focus, distractors and map language.",
-    modes: ["Full Listening Section", "Part 1", "Part 2", "Part 3", "Part 4", "Individual Question Types", "Quick Practice"],
+    modes: ["Blueprint", "Full Listening Test", "Part 1", "Part 2", "Part 3", "Part 4", "Practice by Question Type"],
   },
   writing: {
     label: "Writing",
@@ -76,7 +76,7 @@ export const moduleConfig: Record<
     ring: "ring-[#c96f1e]/25",
     gradient: "from-[#f7e4c8] via-[#f6ecdb] to-[#f3dabe]",
     description: "Task 1 and Task 2 workflows with orange focus, evaluated by band descriptors.",
-    modes: ["Full Writing Section", "Task 1", "Task 2", "Essay Types", "Quick Practice"],
+    modes: ["Blueprint", "Full Writing Test", "Task 1", "Task 2", "Practice by Question Type"],
   },
   speaking: {
     label: "Speaking",
@@ -86,9 +86,28 @@ export const moduleConfig: Record<
     ring: "ring-[#7a4fc4]/25",
     gradient: "from-[#e6ddf6] via-[#f0ebfb] to-[#d9ccef]",
     description: "Interview, cue-card, and Part 3 extension with purple focus and examiner feedback.",
-    modes: ["Full Speaking Section", "Part 1", "Part 2", "Part 3", "Topic Practice", "Quick Practice"],
+    modes: ["Blueprint", "Full Speaking Test", "Part 1", "Part 2", "Part 3", "Practice by Question Type"],
   },
 };
+
+export function modeToBackend(module: Skill, label: string): string {
+  const full = {
+    reading: "Full Reading Section",
+    listening: "Full Listening Section",
+    writing: "Full Writing Section",
+    speaking: "Full Speaking Section",
+  } as Record<Skill, string>;
+  if (label === "Full Reading Test" || label === "Full Listening Test" || label === "Full Writing Test" || label === "Full Speaking Test") {
+    return full[module];
+  }
+  if (label === "Practice by Question Type") {
+    return module === "writing" ? "Essay Types" : module === "speaking" ? "Topic Practice" : "Individual Question Types";
+  }
+  if (label === "Practice by Task Type") {
+    return "Essay Types";
+  }
+  return label;
+}
 
 export const sampleResponses: Record<Skill, string> = {
   reading:

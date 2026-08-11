@@ -14,17 +14,27 @@ _TARGET = 500
 
 _TYPES = [
     ("Multiple Choice", "multiple-choice"),
-    ("Map Labelling", "map-labelling"),
-    ("Form / Note Completion", "form-completion"),
+    ("Map / Plan / Diagram Labelling", "map-labelling"),
+    ("Form Completion", "form-completion"),
+    ("Note Completion", "note-completion"),
+    ("Table Completion", "table-completion"),
+    ("Flow-chart Completion", "flow-chart-completion"),
+    ("Summary Completion", "summary-completion"),
     ("Sentence Completion", "sentence-completion"),
+    ("Short Answer", "short-answer"),
     ("Matching", "matching"),
 ]
 
 _TIPS = {
     "Multiple Choice": ["Listen for the REASON stated, not just repeated words.", "Distractors repeat heard words with a different meaning.", "The answer is usually the option that paraphrases the speaker."],
-    "Map Labelling": ["Trace the route; the answer is about the DESTINATION.", "Listen for left/right/opposite/next to.", "The last place mentioned is often the answer."],
-    "Form / Note Completion": ["Numbers and names are repeated — the second version is reliable.", "Write as you hear; copy the spelling exactly.", "The field label tells you what to listen for."],
+    "Map / Plan / Diagram Labelling": ["Identify the visual (map, plan or diagram) and trace the route or the part labels.", "Listen for left/right/opposite/next to.", "The last place mentioned is often the answer."],
+    "Form Completion": ["Numbers and names are repeated — the second version is reliable.", "Write as you hear; copy the spelling exactly.", "The field label tells you what to listen for."],
+    "Note Completion": ["Notes are short: predict the missing type (name, number, time).", "Copy the exact recorded words.", "Each note follows the order of the recording."],
+    "Table Completion": ["Read the row and column headers to predict the missing cell.", "Answers are usually copied exactly from the recording.", "Work through the table in the order of the audio."],
+    "Flow-chart Completion": ["Read the steps and arrows: each gap continues the previous stage.", "Answers come in the order they are heard.", "Copy exact words, watch plural endings."],
+    "Summary Completion": ["Read the summary before the audio and predict each gap.", "Keep to the word limit.", "The summary follows the recording order."],
     "Sentence Completion": ["Respect the word limit.", "Copy exact words, do not paraphrase.", "Underline the key word in the gap sentence first."],
+    "Short Answer": ["Read the question and predict the fact type (place, price, time).", "Answers are usually one or two words.", "Do not add detail the question does not ask for."],
     "Matching": ["Keep a running list of who does what.", "First words you hear may belong to someone else.", "Write the letter next to each name as stated."],
 }
 
@@ -137,6 +147,49 @@ _CONCERNS = [
     ("the room size", "using the hall next door"),
 ]
 
+_MCQ_EXTRA = [
+    ("the single room costs ninety-five pounds for a night", "The single room price is ninety-five pounds", ["It costs eighty-two pounds", "It costs ninety-five pounds", "It costs one hundred and ten pounds", "It costs seventy pounds"]),
+    ("the workshop begins at half past nine", "The workshop starts at half past nine", ["It starts at nine o'clock", "It starts at half past nine", "It starts at quarter to ten", "It starts at ten o'clock"]),
+    ("payment is taken at the reception desk afterwards", "Payment is made at reception", ["Payment is online", "Payment is at reception", "Payment is by post", "Payment is at the café"]),
+    ("the first session is on Saturday morning", "The first session is on Saturday", ["The first session is Sunday", "The first session is Saturday", "The first session is Monday", "The first session is Friday"]),
+]
+
+_FLOW_SETS = [
+    ("entering the hall", "finding the seat", "collecting the programme"),
+    ("booking online", "receiving a confirmation", "paying at the desk"),
+    ("choosing the room", "signing the form", "meeting the tutor"),
+    ("checking the map", "walking to the gate", "showing the pass"),
+    ("filling the tray", "selecting the oil", "fitting the filter"),
+    ("pressing the button", "heating the water", "pouring the coffee"),
+    ("locking the bike", "attaching the helmet", "switching the lamp"),
+    ("sorting the clothes", "loading the drum", "starting the cycle"),
+    ("watering the garden", "installing the timer", "checking the drip line"),
+    ("fitting the mirror", "plugging the cable", "testing the sensor"),
+    ("entering the venue", "finding the seat", "registering the ticket"),
+    ("opening the door", "entering the code", "saving the changes"),
+    ("loading the trolley", "weighing the items", "printing the label"),
+    ("turning the key", "lifting the lid", "opening the gate"),
+    ("mixing the powder", "adding the water", "stirring the mixture"),
+    ("closing the timer", "boiling the water", "steeping the tea"),
+    ("inserting the card", "entering the pin", "collecting the cash"),
+    ("kneading the dough", "shaping the rolls", "baking the bread"),
+    ("trimming the plants", "cutting the lawn", "mulching the beds"),
+    ("assembling the frame", "fixing the wheels", "tightening the bolts"),
+    ("scanning the ticket", "walking through the gate", "boarding the coach"),
+    ("selecting the yarn", "loading the loom", "starting the weave"),
+    ("checking the tyre", "pumping the air", "sealing the valve"),
+    ("washing the tanks", "filling the vat", "starting the brew"),
+    ("choosing the seat", "fastening the belt", "lowering the tray"),
+    ("raising the ladder", "fixing the hooks", "testing the weight"),
+    ("peeling the cable", "connecting the joints", "testing the signal"),
+    ("uploading the file", "checking the names", "sending the invite"),
+    ("harvesting the pods", "drying the beans", "packing the sacks"),
+    ("cleaning the lenses", "adjusting the focus", "catching the image"),
+    ("folding the paper", "gluing the edges", "pressing the fold"),
+    ("watering the soil", "placing the seeds", "covering the tray"),
+    ("tying the ropes", "hoisting the sail", "securing the cleat"),
+]
+
 _used: set[str] = set()
 _bank: list[Item] = []
 _ids = 0
@@ -191,8 +244,8 @@ def build() -> list[Item]:
             for prompt, answer in prompts:
                 if len(made_form) >= _TARGET:
                     break
-                item_obj = _mk("Form / Note Completion", "form-completion", f"{_part(i)} · Form detail",
-                               scene, prompt, [], answer, _TIPS["Form / Note Completion"][i % 3])
+                item_obj = _mk("Form Completion", "form-completion", f"{_part(i)} · Form detail",
+                               scene, prompt, [], answer, _TIPS["Form Completion"][i % 3])
                 if item_obj:
                     made_form.append(item_obj)
     if len(made_form) < _TARGET:
@@ -201,8 +254,8 @@ def build() -> list[Item]:
                 break
             i += 1
             scene = f"Receptionist: What's your surname, please? Customer: It's {name}. Receptionist: Thank you, and your membership will be ready next week."
-            item_obj = _mk("Form / Note Completion", "form-completion", f"{_part(i)} · Surname",
-                           scene, "Surname: ____.", [], name, _TIPS["Form / Note Completion"][i % 3])
+            item_obj = _mk("Form Completion", "form-completion", f"{_part(i)} · Surname",
+                           scene, "Surname: ____.", [], name, _TIPS["Form Completion"][i % 3])
             if item_obj:
                 made_form.append(item_obj)
     if len(made_form) < _TARGET:
@@ -212,8 +265,8 @@ def build() -> list[Item]:
                     break
                 i += 1
                 scene = f"Guide: The market opens at {phrase} every {day}. The workshop begins an hour later."
-                item_obj = _mk("Form / Note Completion", "form-completion", f"{_part(i)} · Opening time",
-                               scene, f"The market opens at ____ on {day}.", [], numeric, _TIPS["Form / Note Completion"][i % 3])
+                item_obj = _mk("Form Completion", "form-completion", f"{_part(i)} · Opening time",
+                               scene, f"The market opens at ____ on {day}.", [], numeric, _TIPS["Form Completion"][i % 3])
                 if item_obj:
                     made_form.append(item_obj)
     if len(made_form) < _TARGET:
@@ -223,8 +276,8 @@ def build() -> list[Item]:
                     break
                 i += 1
                 scene = f"Advisor: I need a contact number, please. Student: It's {name}, surname {_NAMES[(hash(name) % len(_NAMES))]}, and my mobile is {phone}. Advisor: {phone}, thank you."
-                item_obj = _mk("Form / Note Completion", "form-completion", f"{_part(i)} · Contact detail",
-                               scene, f"{name}'s mobile number: ____.", [], phone, _TIPS["Form / Note Completion"][i % 3])
+                item_obj = _mk("Form Completion", "form-completion", f"{_part(i)} · Contact detail",
+                               scene, f"{name}'s mobile number: ____.", [], phone, _TIPS["Form Completion"][i % 3])
                 if item_obj:
                     made_form.append(item_obj)
     if len(made_form) < _TARGET:
@@ -234,8 +287,8 @@ def build() -> list[Item]:
                     break
                 i += 1
                 scene = f"Clerk: And where shall we send it, {name}? Caller: To {addr}, please. Clerk: {addr}? Noted."
-                item_obj = _mk("Form / Note Completion", "form-completion", f"{_part(i)} · Address",
-                               scene, f"The delivery address is ____.", [], addr, _TIPS["Form / Note Completion"][i % 3])
+                item_obj = _mk("Form Completion", "form-completion", f"{_part(i)} · Address",
+                               scene, f"The delivery address is ____.", [], addr, _TIPS["Form Completion"][i % 3])
                 if item_obj:
                     made_form.append(item_obj)
     if len(made_form) < _TARGET:
@@ -245,8 +298,8 @@ def build() -> list[Item]:
                     break
                 i += 1
                 scene = f"Nurse: When does the appointment suit you, {name}? Caller: {phrase} would work. Nurse: {phrase}, confirmed."
-                item_obj = _mk("Form / Note Completion", "form-completion", f"{_part(i)} · Appointment",
-                               scene, f"{name}'s appointment is on ____.", [], numeric, _TIPS["Form / Note Completion"][i % 3])
+                item_obj = _mk("Form Completion", "form-completion", f"{_part(i)} · Appointment",
+                               scene, f"{name}'s appointment is on ____.", [], numeric, _TIPS["Form Completion"][i % 3])
                 if item_obj:
                     made_form.append(item_obj)
 
@@ -262,9 +315,9 @@ def build() -> list[Item]:
                     break
                 i += 1
                 scene = f"Go past {ref}, and the {dest} is {where} of the entrance."
-                item_obj = _mk("Map Labelling", "map-labelling", f"{_part(i)} · Route detail",
+                item_obj = _mk("Map / Plan / Diagram Labelling", "map-labelling", f"{_part(i)} · Route detail",
                                scene, f"Relative to {ref}, where is the {dest} located?", _DIRWORDS, where,
-                               _TIPS["Map Labelling"][(d + r + k) % 3])
+                               _TIPS["Map / Plan / Diagram Labelling"][(d + r + k) % 3])
                 if item_obj:
                     made_map.append(item_obj)
 
@@ -322,13 +375,7 @@ def build() -> list[Item]:
             made_mcq.append(item_obj)
 
     # Extra breadth: confirm which stated detail matches across item scenes.
-    _mcq_extra = [
-        ("the single room costs ninety-five pounds for a night", "The single room price is ninety-five pounds", ["It costs eighty-two pounds", "It costs ninety-five pounds", "It costs one hundred and ten pounds", "It costs seventy pounds"]),
-        ("the workshop begins at half past nine", "The workshop starts at half past nine", ["It starts at nine o'clock", "It starts at half past nine", "It starts at quarter to ten", "It starts at ten o'clock"]),
-        ("payment is taken at the reception desk afterwards", "Payment is made at reception", ["Payment is online", "Payment is at reception", "Payment is by post", "Payment is at the café"]),
-        ("the first session is on Saturday morning", "The first session is on Saturday", ["The first session is Sunday", "The first session is Saturday", "The first session is Monday", "The first session is Friday"]),
-    ]
-    for detail, prompt, options in _mcq_extra:
+    for detail, prompt, options in _MCQ_EXTRA:
         for k in range(12):
             if len(made_mcq) >= _TARGET:
                 break
@@ -396,9 +443,201 @@ def build() -> list[Item]:
             if item_obj:
                 made_sc.append(item_obj)
 
+# --- Note Completion: short notes from names x items x times ---
+    made_note: list[Item] = []
+    i = 0
+    for name in _NAMES:
+        if len(made_note) >= _TARGET:
+            break
+        for item, unit, pa, pb in _ITEMS[:10]:
+            if len(made_note) >= _TARGET:
+                break
+            i += 1
+            scene = f"Clerk: Booking the {item} for {name}? The rate is {pa} per {unit}. Student: That matches my notes."
+            item_obj = _mk("Note Completion", "note-completion", f"{_part(i)} · Note",
+                           scene, f"Notes · {name} · {item}: rate ____ per {unit}.", [], pa,
+                           _TIPS["Note Completion"][i % 3])
+            if item_obj:
+                made_note.append(item_obj)
+    for phrase, numeric in _TIMEPHRASE:
+        if len(made_note) >= _TARGET:
+            break
+        for venue in _VENUES:
+            if len(made_note) >= _TARGET:
+                break
+            i += 1
+            scene = f"Announcer: {venue} today starts at {phrase} and runs for one hour."
+            item_obj = _mk("Note Completion", "note-completion", f"{_part(i)} · Note",
+                           scene, f"Notes · {venue}: starts at ____.", [], numeric,
+                           _TIPS["Note Completion"][i % 3])
+            if item_obj:
+                made_note.append(item_obj)
+    if len(made_note) < _TARGET:
+        for name in _NAMES:
+            if len(made_note) >= _TARGET:
+                break
+            i += 1
+            scene = f"Receptionist: Surname, please. Guest: It's {name}. I'm here for the Geology course."
+            item_obj = _mk("Note Completion", "note-completion", f"{_part(i)} · Note",
+                           scene, "Notes · surname ____ · course Geology.", [], name,
+                           _TIPS["Note Completion"][i % 3])
+            if item_obj:
+                made_note.append(item_obj)
+
+    # --- Table Completion: fee tables with venues x items x fields ---
+    made_table: list[Item] = []
+    i = 0
+    for venue in _VENUES:
+        if len(made_table) >= _TARGET:
+            break
+        for item, unit, pa, pb in _ITEMS:
+            if len(made_table) >= _TARGET:
+                break
+            i += 1
+            scene = f"{venue}: standard {item} {pa} per {unit}, premium {pb} per {unit}."
+            item_obj = _mk("Table Completion", "table-completion", f"{_part(i)} · Table row",
+                           scene, f"Complete the table · {venue} — {item}: standard ____; premium {pb}.",
+                           [], pa, _TIPS["Table Completion"][i % 3])
+            if item_obj:
+                made_table.append(item_obj)
+            if len(made_table) >= _TARGET:
+                break
+            i += 1
+            item_obj = _mk("Table Completion", "table-completion", f"{_part(i)} · Table row",
+                           scene, f"Complete the table · {venue} — {item}: premium ____ (fill the right column).",
+                           [], pb, _TIPS["Table Completion"][i % 3])
+            if item_obj:
+                made_table.append(item_obj)
+    if len(made_table) < _TARGET:
+        for day in ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "New Year", "Bank holiday", "Sale week"):
+            if len(made_table) >= _TARGET:
+                break
+            for item, unit, pa, pb in _ITEMS:
+                if len(made_table) >= _TARGET:
+                    break
+                i += 1
+                scene = f"On {day} the {item} rate shifts: standard {pa}, premium {pb} per {unit}."
+                item_obj = _mk("Table Completion", "table-completion", f"{_part(i)} · Table row",
+                               scene, f"Table · {day}: {item} · standard ____ · premium {pb} ({unit}).",
+                               [], pa, _TIPS["Table Completion"][i % 3])
+                if item_obj:
+                    made_table.append(item_obj)
+
+    # --- Flow-chart Completion: stage sequences x people x options ---
+    made_flow: list[Item] = []
+    i = 0
+    for stages in _FLOW_SETS:
+        if len(made_flow) >= _TARGET:
+            break
+        for venue in _VENUES:
+            if len(made_flow) >= _TARGET:
+                break
+            i += 1
+            scene = f"At the {venue}: {stages[0]}, then {stages[1]} and finally {stages[2]}."
+            item_obj = _mk("Flow-chart Completion", "flow-chart-completion", f"{_part(i)} · Flow step",
+                           scene,
+                           f"Complete the flow-chart for the {venue}: start → {stages[0]} → {stages[1]} → ____",
+                           [], stages[2], _TIPS["Flow-chart Completion"][i % 3])
+            if item_obj:
+                made_flow.append(item_obj)
+            if len(made_flow) >= _TARGET:
+                break
+            i += 1
+            item_obj = _mk("Flow-chart Completion", "flow-chart-completion", f"{_part(i)} · Flow step",
+                           scene,
+                           f"Complete the flow-chart for the {venue}: start → ____ → {stages[1]} → {stages[2]}",
+                           [], stages[0], _TIPS["Flow-chart Completion"][i % 3])
+            if item_obj:
+                made_flow.append(item_obj)
+
+    # --- Summary Completion: one-gap summaries over bank scenes ---
+    made_summary: list[Item] = []
+    i = 0
+    for scene, title in pool_scenes:
+        if len(made_summary) >= _TARGET:
+            break
+        words = scene.split()
+        if len(words) < 6:
+            continue
+        for k in range(2):
+            if len(made_summary) >= _TARGET:
+                break
+            pos = 3 + ((i * 11 + k * 5) % (len(words) - 3))
+            gap_word = words[pos].strip(".,:?")
+            if len(gap_word) < 3 or not gap_word[0].isalpha():
+                continue
+            i += 1
+            gapped = list(words)
+            gapped[pos] = "____"
+            item_obj = _mk("Summary Completion", "summary-completion", f"{_part(i)} · Summary",
+                           scene, "Complete the summary with ONE word: " + " ".join(gapped) + ".",
+                           [], gap_word.lower(), _TIPS["Summary Completion"][i % 3])
+            if item_obj:
+                made_summary.append(item_obj)
+
+    # --- Short Answer: one/two-word factual questions from the same pools ---
+    made_sa: list[Item] = []
+    i = 0
+    for name in _NAMES:
+        if len(made_sa) >= _TARGET:
+            break
+        for phone in _PHONES:
+            if len(made_sa) >= _TARGET:
+                break
+            i += 1
+            scene = f"Advisor: Contact details, please. Student: I'm {name} and my mobile is {phone}."
+            item_obj = _mk("Short Answer", "short-answer", f"{_part(i)} · Short answer",
+                           scene, f"What is {name}'s mobile number?", [], phone,
+                           _TIPS["Short Answer"][i % 3])
+            if item_obj:
+                made_sa.append(item_obj)
+    if len(made_sa) < _TARGET:
+        for phrase, numeric in _TIMEPHRASE:
+            if len(made_sa) >= _TARGET:
+                break
+            for venue in _VENUES:
+                if len(made_sa) >= _TARGET:
+                    break
+                i += 1
+                scene = f"The {venue} opens at {phrase} on weekdays and an hour later at weekends."
+                item_obj = _mk("Short Answer", "short-answer", f"{_part(i)} · Short answer",
+                               scene, f"What time does the {venue} open on weekdays?", [], numeric,
+                               _TIPS["Short Answer"][i % 3])
+                if item_obj:
+                    made_sa.append(item_obj)
+    if len(made_sa) < _TARGET:
+        for item, unit, pa, pb in _ITEMS:
+            if len(made_sa) >= _TARGET:
+                break
+            for day in ("Friday", "Saturday"):
+                if len(made_sa) >= _TARGET:
+                    break
+                i += 1
+                scene = f"The {item} is {pa} per {unit} on weekdays and {pb} on {day}."
+                item_obj = _mk("Short Answer", "short-answer", f"{_part(i)} · Short answer",
+                               scene, f"On {day}, the usual market rate for the {item} is how much per {unit}?", [], pb,
+                               _TIPS["Short Answer"][i % 3])
+                if item_obj:
+                    made_sa.append(item_obj)
+    for phrase, numeric in _TIMEPHRASE:
+        if len(made_sa) >= _TARGET:
+            break
+        i += 1
+        item_obj = _mk("Short Answer", "short-answer", f"{_part(i)} · Short answer",
+                       f"The library opens at {phrase} on weekdays.",
+                       "What time does the library open on weekdays?",
+                       [], numeric, _TIPS["Short Answer"][i % 3])
+        if item_obj:
+            made_sa.append(item_obj)
+
     _bank.extend(made_mcq)
     _bank.extend(made_map)
     _bank.extend(made_form)
+    _bank.extend(made_note)
+    _bank.extend(made_table)
+    _bank.extend(made_flow)
+    _bank.extend(made_summary)
+    _bank.extend(made_sa)
     _bank.extend(made_sc)
     _bank.extend(made_match)
     return list(_bank)

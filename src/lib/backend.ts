@@ -84,11 +84,24 @@ export async function isBackendUp(timeoutMs = 1600): Promise<boolean> {
   }
 }
 
+export const voiceApi = {
+  transcribe(audioBase64: string, mime: string, timeoutMs = 45000): Promise<{ text: string }> {
+    return request<{ text: string }>(
+      "/brain/transcribe",
+      {
+        method: "POST",
+        body: JSON.stringify({ audio: audioBase64, mime }),
+        signal: AbortSignal.timeout(timeoutMs),
+      },
+      true,
+    );
+  },
+};
+
 export const authApi = {
   register(full_name: string, email: string, password: string): Promise<RegisterResponse> {
     return request<RegisterResponse>("/auth/register", { method: "POST", body: JSON.stringify({ full_name, email, password }) }, false);
-  },
-  login(email: string, password: string): Promise<AuthResponse> {
+  },  login(email: string, password: string): Promise<AuthResponse> {
     return request<AuthResponse>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }, false);
   },
   verify(email: string, code: string): Promise<AuthResponse> {
@@ -114,3 +127,19 @@ export const authApi = {
     return request<AuthResponse>("/auth/me");
   },
 };
+
+export async function speakText(text: string): Promise<Blob | null> {
+  const token = getToken();
+  if (!token) return null;
+  try {
+    const response = await fetch(`${API_BASE}/brain/tts`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ text }),
+    });
+    if (!response.ok) return null;
+    return await response.blob();
+  } catch {
+    return null;
+  }
+}

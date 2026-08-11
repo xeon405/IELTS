@@ -1,5 +1,6 @@
 """AI IELTS Examiner API entrypoint."""
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -20,6 +21,21 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
 logger = logging.getLogger("uvicorn.error")
+
+
+async def _db_keepalive(stop: asyncio.Event):
+    """Serverless Postgres (Neon) sleeps when idle and force-closes mid-request
+    connections; wake it every 30s so evaluations never hit a sleeping DB."""
+    while not stop.is_set():
+        try:
+            with engine.connect() as conn:
+                conn.exec_driver_sql("SELECT 1")
+        except Exception:  # noqa: BLE001 - wake will retry next tick
+            logger.warning("DB keepalive ping failed; serverless DB still waking up")
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=30)
+        except asyncio.TimeoutError:
+            pass
 
 
 @asynccontextmanager
@@ -45,7 +61,13 @@ async def lifespan(app: FastAPI):
                 for clause in alterations:
                     conn.exec_driver_sql(f"ALTER TABLE users {clause}")
     logger.info("startup complete (database=%s)", active_dialect())
-    yield
+    stop = asyncio.Event()
+    wake = asyncio.create_task(_db_keepalive(stop))
+    try:
+        yield
+    finally:
+        stop.set()
+        wake.cancel()
     logger.info("shutdown complete")
 
 

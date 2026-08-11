@@ -8,7 +8,6 @@ Pipeline: load profile -> history -> analyse bands -> detect weaknesses ->
 choose skill/type/topic/difficulty -> consult knowledge base -> build prompt
 -> Gemini -> validate -> return session. Every step is visible in `pipeline`."""
 
-import random
 import re
 from typing import Any
 
@@ -59,6 +58,134 @@ def detect_weaknesses(bands: dict, weak_types: list[str], weak_topics: list[str]
     if not weaknesses:
         weaknesses.append("Bands are balanced; raising accuracy and speed will lift the overall band")
     return weaknesses
+
+
+def _item_difficulty(item: dict, module: str) -> float:
+    """Deterministic 4.5-9.0 difficulty estimate for adaptive offline ordering.
+
+    Mirrors the signals real IELTS uses: passage position (Passage 1 is the
+    easiest), vocabulary density of the stimulus, and how many words the
+    answer requires.
+    """
+    context = str(item.get("context") or "")
+    options = item.get("options") or []
+    answer = str(item.get("correctAnswer") or "")
+    title = str(item.get("title") or "")
+    prompt = str(item.get("prompt") or "")
+
+    base = 5.5
+    passage = re.search(r"Passage (\d)", title)
+    if passage:
+        base = 5.5 + max(0, int(passage.group(1)) - 1)
+    words = re.findall(r"[a-zA-Z]+", context)
+    if words:
+        avg_len = sum(len(w) for w in words) / len(words)
+        base += max(-0.5, min(0.5, (avg_len - 5.0) * 0.3))
+    base += min(1.0, (len(options) - 2) * 0.35) if len(options) > 2 else 0.0
+    base += min(1.0, len(answer.split()) * 0.2)
+    base = max(4.5, min(9.0, base))
+    if module == "writing" and "process" in prompt.lower():
+        base = min(9.0, base + 0.5)
+    return round(base, 1)
+
+
+def _adaptive_fallback_order(pool: list[dict], module: str, bands: dict, weak_types: list[str], interleave_types: bool = False) -> list[dict]:
+    """Order an offline pool for ONE session, never randomly.
+
+    Rules (same spirit as a real adaptive test):
+    1. The student's weakest question types come first (they need the reps most).
+    2. Within each weakness group the difficulty ramps from the current band
+       upward, with a periodic easier consolidation question.
+    3. Everything stays deterministic: the same student always sees the same
+       session, so progress is comparable.
+    4. Full sections (reading/listening mock) interleave question types the
+       way a real exam does — each passage mixes two or three types — while
+       still opening with the weakest types.
+    """
+    current = float(bands.get(module, 5.5) or 5.5)
+    scored = []
+    for index, item in enumerate(pool):
+        label = str(item.get("typeLabel") or item.get("type") or "").lower()
+        weak_hit = next((w.lower() for w in weak_types if w.lower() in label), None)
+        scored.append((index, item, weak_hit, _item_difficulty(item, module)))
+
+    weak_items = sorted(
+        [entry for entry in scored if entry[2]],
+        key=lambda entry: (entry[2], entry[3]),
+    )
+    other_items = sorted(
+        [entry for entry in scored if not entry[2]],
+        key=lambda entry: entry[3],
+    )
+
+    def ladderized(entries: list[tuple[int, dict, str | None, float]]) -> list[dict]:
+        buckets: dict[float, list[dict]] = {}
+        for _, item, _hit, difficulty in entries:
+            buckets.setdefault(round(difficulty, 1), []).append(item)
+        if not buckets:
+            return [item for _, item, _hit, _d in entries]
+        available = sorted(buckets.keys())
+        result: list[dict] = []
+        difficulty = min(available, key=lambda d: abs(d - current))
+        guard = 0
+        while len(result) < len(entries):
+            bucket = buckets.get(difficulty)
+            if bucket:
+                result.append(bucket.pop(0))
+                guard = 0
+            else:
+                remaining_keys = [d for d, items in buckets.items() if items]
+                if not remaining_keys:
+                    break
+                difficulty = min(remaining_keys, key=lambda d: abs(d - difficulty))
+                guard += 1
+                if guard > len(buckets) + 1:
+                    break
+                continue
+            if len(result) % 5 != 0:
+                difficulty = round(difficulty + 0.5, 1)
+            else:
+                difficulty = round(current, 1)
+            if difficulty > 9.0:
+                difficulty = min(available, key=lambda d: abs(d - difficulty))
+        for bucket_items in buckets.values():
+            result.extend(bucket_items)
+        return result
+
+    if not interleave_types:
+        ordered = ladderized(weak_items) + ladderized(other_items)
+    else:
+        # Round-robin across the types present so a full section reads like the
+        # real exam (a mix of types), with the weakest type opening first.
+        def entry_label(entry: tuple[int, dict, str | None, float]) -> str:
+            _index, item, weak_hit, _diff = entry
+            return str((weak_hit or item.get("typeLabel") or item.get("type") or "other")).lower()
+
+        weak_label = entry_label(weak_items[0]) if weak_items else None
+        typed: dict[str, list[tuple[int, dict, str | None, float]]] = {}
+        for entry in weak_items + other_items:
+            typed.setdefault(entry_label(entry), []).append(entry)
+        type_order = sorted(
+            typed.keys(),
+            key=lambda label: (0 if label == weak_label else 1, label),
+        )
+        iterators = {label: ladderized(entries) for label, entries in typed.items()}
+        pointers = {label: 0 for label in type_order}
+        ordered: list[dict] = []
+        cycle = 0
+        while any(pointers[label] < len(iterators[label]) for label in type_order):
+            label = type_order[cycle % len(type_order)]
+            group = iterators[label]
+            if pointers[label] < len(group):
+                ordered.append(group[pointers[label]])
+                pointers[label] += 1
+            cycle += 1
+        ordered = ordered or list(pool)
+
+    # Fall back to original order if anything went sideways (never random).
+    if not ordered:
+        ordered = list(pool)
+    return ordered
 
 
 # ---------------------------------------------------------------------------
@@ -343,40 +470,187 @@ TYPE_FOCUS = {
     "multiple-choice": "Precise option elimination against the source text",
     "true-false": "Logical True / False / Not Given decision",
     "yes-no-not-given": "Writer-opinion logic (Yes / No / Not Given)",
+    "matching-information": "Locating specific information in the correct paragraph",
     "matching-headings": "Whole-paragraph main idea",
     "sentence-completion": "Exact word capture with correct part of speech",
     "short-answer": "Keyword scanning and exact copying",
     "matching": "Feature-to-option matching under time pressure",
     "matching-sentence-endings": "Logical sentence completion from text meaning",
     "summary-completion": "Gap prediction and word limit discipline",
+    "note-completion": "Short-note capture with word limit discipline",
+    "table-completion": "Column prediction before audio",
+    "flow-chart-completion": "Stage-by-stage process capture",
+    "diagram-label-completion": "Relating description to labelled parts",
     "form-completion": "Detail capture in forms and notes",
     "map-labelling": "Route tracing and direction language",
-    "table-completion": "Column prediction before audio",
-    "essay": "Task Achievement, Coherence, Lexical Resource, Grammar",
-    "speaking-cue": "Fluency, lexical range, grammar, pronunciation",
+    "essay": "Task Achievement/Response, Coherence and Cohesion, Lexical Resource, Grammatical Range and Accuracy",
+    "speaking-cue": "Fluency and Coherence, Lexical Resource, Grammatical Range and Accuracy, Pronunciation",
 }
 
 
-def _build_fallback_session(module: str, mode: str, count: int, bands: dict, test_type: str = "academic") -> dict:
-    bank = FALLBACK_ITEMS[module]
+def _full_pool(module: str, type_label: str) -> list[dict]:
+    """Item pool for one type label (large bank first, small bank fallback)."""
+    if module == "speaking":
+        pool = large_bank.items_for_type("speaking", type_label) or speaking_bank.items_for_type(type_label)
+    elif module == "listening":
+        pool = large_bank.items_for_type("listening", type_label) or listening_bank.items_for_type(type_label)
+    else:
+        pool = large_bank.items_for_type("reading", type_label) or reading_bank.items_for_type(type_label)
+    return [item for item in pool if str(item.get("correctAnswer") or "").strip()] or list(pool)
+
+
+def _typed_pool(module: str, type_labels: list[str] | None) -> list[dict]:
+    """Combined pool for a passage/part slot restricted to its official types."""
+    if not type_labels:
+        return []
+    flat: list[dict] = []
+    for label in type_labels:
+        flat.extend(_full_pool(module, label))
+    return flat
+
+
+def _full_item(module: str, label: str, base: dict, index: int, bands: dict, weak_types: list[str], topic: str) -> dict:
+    """Wrap one bank item into an official exam item (Full Reading / Listening / Speaking)."""
+    difficulty = _item_difficulty(base, module)
+    weak_reason = next((w for w in weak_types if w.lower() in label.lower()), None)
+    if weak_reason:
+        adaptive_reason = f"Chosen because {weak_reason} is a weak question type for you — placed early in this full section."
+    elif index == 0:
+        adaptive_reason = f"Opens at your current band ({bands.get(module, 5.5):.1f})."
+    else:
+        adaptive_reason = f"Ramps from band {bands.get(module, 5.5):.1f} targeting your weakest question types."
+    return {
+        "id": f"{module}-{index + 1}-{base['type'][:4]}",
+        "skill": module,
+        "type": base["type"],
+        "title": f"{label} · {base.get('title', 'Practice question')} · {topic}",
+        "prompt": base["prompt"],
+        "context": base.get("context", ""),
+        "options": base.get("options", []),
+        "expectedFocus": TYPE_FOCUS.get(base["type"], base["type"]),
+        "descriptorFocus": TYPE_FOCUS.get(base["type"], base["type"]),
+        "correctAnswer": base.get("correctAnswer", ""),
+        "explanation": base.get("explanation", ""),
+        "logic": base.get("logic", ""),
+        "tip": base.get("tip", "Review this question type in the section blueprint and practise again."),
+        "suggestions": base.get("suggestions", ""),
+        "bandAdvice": base.get("bandAdvice", ""),
+        "chart": base.get("chart") or {},
+        "difficultyBand": difficulty,
+        "adaptiveReason": adaptive_reason,
+    }
+
+
+def _build_full_layout_session(
+    module: str, mode: str, count: int, bands: dict, test_type: str, weak_types: list[str], topics: list[str]
+) -> dict:
+    """Build a real full section in official exam layout.
+
+    Reading 40 -> Passage 1 (13), Passage 2 (13), Passage 3 (14), each a typed
+    group sharing one passage context. Listening 40 -> Part 1-4 (10 each), each
+    sharing one recording script. Speaking 18 -> Part 1 (12), Part 2 (1 cue
+    card), Part 3 (5 discussion), in exam order.
+    """
+    layout: dict[str, list[tuple[str, dict[str, int]]]] = {
+        "reading": [
+            ("Passage 1", {"True / False / Not Given": 5, "Multiple Choice": 2, "Sentence Completion": 3, "Short Answer": 3}),
+            ("Passage 2", {"Matching Headings": 4, "Summary Completion": 3, "Table Completion": 2, "Flow-chart Completion": 2, "Multiple Choice": 2}),
+            ("Passage 3", {"Yes / No / Not Given": 4, "Matching Features": 2, "Matching Sentence Endings": 2, "Matching Information": 2, "Note Completion": 2, "Short Answer": 2}),
+        ],
+        "listening": [
+            ("Part 1", {"Form Completion": 4, "Note Completion": 3, "Multiple Choice": 3}),
+            ("Part 2", {"Map / Plan / Diagram Labelling": 4, "Multiple Choice": 3, "Table Completion": 3}),
+            ("Part 3", {"Matching": 4, "Multiple Choice": 3, "Short Answer": 3}),
+            ("Part 4", {"Sentence Completion": 4, "Summary Completion": 2, "Flow-chart Completion": 2, "Multiple Choice": 2}),
+        ],
+        "speaking": [
+            ("Part 1", {"Part 1": 12}),
+            ("Part 2", {"Part 2": 1}),
+            ("Part 3", {"Part 3": 5}),
+        ],
+    }
+    groups = layout.get(module, [])
+    items: list[dict] = []
+    serial = 0
+    for section_label, type_counts in groups:
+        section_items: list[dict] = []
+        for type_label, need in type_counts.items():
+            pool = _full_pool(module, type_label)
+            for slot in range(need):
+                base = pool[slot % max(1, len(pool))]
+                topic = topics[(serial * 7 + serial // max(1, len(pool))) % len(topics)]
+                section_items.append(_full_item(module, type_label, base, serial, bands, weak_types, topic))
+                serial += 1
+        # Shared context per section: reading passage / listening script.
+        if module in ("reading", "listening"):
+            context_parts = list(dict.fromkeys(str(it.get("context") or "").strip() for it in section_items if str(it.get("context") or "").strip()))
+            shared = "\n\n".join(context_parts) if context_parts else (
+                "You will hear a recording. Listen once and answer the questions." if module == "listening"
+                else "Read the passage and answer the questions that follow."
+            )
+            for item in section_items:
+                item["context"] = shared
+                item["sectionLabel"] = section_label
+        else:
+            for item in section_items:
+                item["sectionLabel"] = section_label
+        items.extend(section_items)
+
+    items = items[: count] if count and count > 0 else items
+    weak_note = f" Weakness priority: {', '.join(weak_types[:2])}." if weak_types else ""
+    return {
+        "id": f"{module}-full-section-{serial}",
+        "module": module,
+        "mode": mode,
+        "title": f"{module.capitalize()} full section — {mode}",
+        "subtitle": f"Full {test_type} {module} exam section in official layout: paper pattern, official question types per passage/part, and recommended time.{weak_note}",
+        "durationMinutes": kb.mode_duration(module, mode),
+        "questionCount": len(items),
+        "questionTypes": list({str(it.get("typeLabel") or it.get("type") or "") for it in items}),
+        "difficultyBand": round(bands.get(module, 5.5) + 0.5, 1),
+        "examinerIntent": f"Real {module} paper pattern built from banked items: official types, official timing, never reduced.",
+        "items": items,
+        "source": "offline-brain",
+    }
+
+
+def _build_fallback_session(module: str, mode: str, count: int, bands: dict, test_type: str = "academic", profile: dict | None = None) -> dict:
     topics = kb.TOPICS[module]
+    weak_types = [str(w).strip() for w in (profile or {}).get("weakQuestionTypes") or [] if str(w).strip()]
+    if mode in ("Full Reading Section", "Full Listening Section", "Full Speaking Section"):
+        return _build_full_layout_session(module, mode, count, bands, test_type, weak_types, topics)
     types = kb.question_types_for(module, mode)
     difficulty = round(bands.get(module, 5.5) + 0.5, 1)
     items: list[dict] = []
 
     if module == "reading":
-        pool = large_bank.items_for_mode("reading", mode) or reading_bank.items_for_mode(mode)
+        if mode in reading_bank.PASSAGE_TYPES:
+            slot_types = reading_bank.PASSAGE_TYPES[mode]
+        else:
+            slot_types = None
+        pool = _typed_pool(module, slot_types) if slot_types else (large_bank.items_for_mode("reading", mode) or reading_bank.items_for_mode(mode))
         bank = pool
     elif module == "listening":
-        pool = large_bank.items_for_mode("listening", mode) or listening_bank.items_for_mode(mode)
+        if mode in listening_bank.PART_TYPES:
+            slot_types = listening_bank.PART_TYPES[mode]
+        else:
+            slot_types = None
+        pool = _typed_pool(module, slot_types) if slot_types else (large_bank.items_for_mode("listening", mode) or listening_bank.items_for_mode(mode))
         bank = pool
     elif module == "writing":
         pool = large_bank.items_for_mode("writing", mode)
         if mode == "Full Writing Section" and count >= 2:
-            data_pool = large_bank.items_for_type("writing", "Task 1 Report (Data)") or writing_bank.items_for_type("Task 1 Report (Data)")
-            essay_pool = large_bank.items_for_type("writing", "Task 2 Opinion") or writing_bank.WRITING_BY_TYPE.get("Task 2 Opinion")
-            data_item = random.choice(data_pool) if data_pool else None
-            essay_item = random.choice(essay_pool) if essay_pool else None
+            task1_labels = ["Task 1 Charts & Graphs", "Task 1 Tables", "Task 1 Mixed Charts", "Task 1 Process", "Task 1 Maps / Plans", "Task 1 Diagrams"]
+            task1_pool: list[dict] = []
+            for label in task1_labels:
+                task1_pool.extend(large_bank.items_for_type("writing", label) or writing_bank.items_for_type(label))
+            task2_pool: list[dict] = []
+            for label in ["Task 2 Opinion", "Task 2 Discussion", "Task 2 Advantages / Disadvantages",
+                          "Task 2 Problem / Solution", "Task 2 Double Question", "Task 2 Mixed / Combined Question"]:
+                task2_pool.extend(large_bank.items_for_type("writing", label) or writing_bank.items_for_type(label))
+            task1_pool = task1_pool or pool
+            data_item = task1_pool[0] if task1_pool else None
+            essay_item = task2_pool[0] if task2_pool else None
             bank = [x for x in (data_item, essay_item) if x] or pool
         else:
             bank = pool or writing_bank.items_for_mode(mode)
@@ -385,7 +659,9 @@ def _build_fallback_session(module: str, mode: str, count: int, bands: dict, tes
         bank = pool
 
     bank = list(bank)
-    random.shuffle(bank)
+    weak_types = [str(w).strip() for w in (profile or {}).get("weakQuestionTypes") or [] if str(w).strip()]
+    interleave_types = mode.startswith("Full ") or "Section" in mode or mode.startswith("Mock") or mode.startswith("Passage ") or mode.startswith("Part ")
+    bank = _adaptive_fallback_order(bank, module, bands, weak_types, interleave_types=interleave_types)
 
     for index in range(count):
         base = bank[index % max(1, len(bank))]
@@ -395,6 +671,15 @@ def _build_fallback_session(module: str, mode: str, count: int, bands: dict, tes
         prompt = base["prompt"]
         if variant % 3 == 2 and base["type"] not in ("essay", "speaking-cue"):
             prompt = f"{base['prompt']} (Topic: {topic})"
+        label = str(base.get("typeLabel") or base.get("type") or "")
+        weak_reason = next((w for w in weak_types if w.lower() in label.lower()), None)
+        difficulty = _item_difficulty(base, module)
+        if weak_reason:
+            adaptive_reason = f"Chosen because {weak_reason} is a known weak question type for you — this item (difficulty band {difficulty:.1f}) sits at your current level of {bands.get(module, 5.5):.1f} and is ordered to build on it."
+        elif index == 0:
+            adaptive_reason = f"Opens right around your current band ({bands.get(module, 5.5):.1f}) so you settle in before difficulty climbs."
+        else:
+            adaptive_reason = f"Ramping from band {bands.get(module, 5.5):.1f} — this item targets the skills your earlier sessions show as least secure ({len(weak_types)} flagged weak types)."
         item = {
             "id": f"{module}-{index + 1}-{base['type'][:4]}",
             "skill": module,
@@ -412,42 +697,59 @@ def _build_fallback_session(module: str, mode: str, count: int, bands: dict, tes
             "suggestions": base.get("suggestions", ""),
             "bandAdvice": base.get("bandAdvice", ""),
             "chart": base.get("chart") or {},
+            "difficultyBand": difficulty,
+            "adaptiveReason": adaptive_reason,
         }
         items.append(item)
 
     if module == "writing":
         items = _ensure_writing_chart(items)
-    elif module == "reading" and mode == "Full Reading Section":
+    elif module == "reading" and mode in ("Full Reading Section", "Passage 1", "Passage 2", "Passage 3"):
         passage_texts = list(dict.fromkeys((str(it.get("context") or "").strip() for it in items if str(it.get("context") or "").strip())))
         if not passage_texts:
             passage_texts = ["A short reading passage follows. Read it before answering the questions."]
-        for idx, item in enumerate(items):
-            passage_index = idx % 3
-            item["context"] = passage_texts[passage_index % len(passage_texts)]
-            title = str(item.get("title") or "Practice question")
-            item["title"] = f"Passage {passage_index + 1} · {title}" if not title.startswith("Passage") else title
-    elif module == "listening" and mode == "Full Listening Section":
+        shared = "\n\n".join(passage_texts)
+        if mode == "Full Reading Section":
+            for idx, item in enumerate(items):
+                passage_index = idx % 3
+                item["context"] = shared if passage_index == 0 else shared
+                title = str(item.get("title") or "Practice question")
+                item["title"] = f"Passage {passage_index + 1} · {title}" if not title.startswith("Passage") else title
+        else:
+            for item in items:
+                item["context"] = shared
+                title = str(item.get("title") or "Practice question")
+                item["title"] = f"{mode} · {title}" if not title.startswith(mode) else title
+    elif module == "listening" and mode in ("Full Listening Section", "Part 1", "Part 2", "Part 3", "Part 4"):
         part_scripts = list(dict.fromkeys((str(it.get("context") or "").strip() for it in items if str(it.get("context") or "").strip())))
         if not part_scripts:
             part_scripts = ["You will hear a recording. Listen once and answer the questions."]
-        for idx, item in enumerate(items):
-            part_index = idx % 4
-            item["context"] = part_scripts[part_index % len(part_scripts)]
-            title = str(item.get("title") or "Practice question")
-            item["title"] = f"Part {part_index + 1} · {title}" if not title.startswith("Part") else title
+        shared = "\n\n".join(part_scripts)
+        if mode == "Full Listening Section":
+            for idx, item in enumerate(items):
+                part_index = idx % 4
+                item["context"] = shared
+                title = str(item.get("title") or "Practice question")
+                item["title"] = f"Part {part_index + 1} · {title}" if not title.startswith("Part") else title
+        else:
+            for item in items:
+                item["context"] = shared
+                title = str(item.get("title") or "Practice question")
+                item["title"] = f"{mode} · {title}" if not title.startswith(mode) else title
     session_id = f"{module}-{mode.lower().replace(' ', '-')}-{index + 1}"
     test_type = test_type if test_type in ("academic", "general") else "academic"
+    weak_note = f" Weakness priority: {', '.join(weak_types[:2])}." if weak_types else ""
     return {
         "id": session_id,
         "module": module,
         "mode": mode,
         "title": f"{module.capitalize()} practice — {mode}",
-        "subtitle": f"Original {test_type} {module} practice selected by the AI Brain for band {bands.get(module, 5.5)}.",
+        "subtitle": f"Adaptive {test_type} {module} practice built from your profile: band {bands.get(module, 5.5)}, target {float((profile or {}).get('targetBand', 7.0) or 7.0)}.{weak_note}",
         "durationMinutes": kb.mode_duration(module, mode),
         "questionCount": len(items),
         "questionTypes": types,
         "difficultyBand": difficulty,
-        "examinerIntent": f"Target your {module} weaknesses and lift your band from {bands.get(module, 5.5)} toward your goal.",
+        "examinerIntent": f"Adaptive selection: start at band {bands.get(module, 5.5)}, weight your weakest question types first, and ramp difficulty toward your target of {float((profile or {}).get('targetBand', 7.0) or 7.0)}. Never random.",
         "items": items,
         "source": "offline-brain",
     }
@@ -607,7 +909,7 @@ def generate_session(profile: dict | None, module: str, mode: str, count: int | 
     # always exceeds the provider output-token cap and fails slowly. Large
     # sessions (mocks, full sections) use the offline banks directly: they are
     # instant, and each bank holds ~500 items per type so nothing repeats.
-    if gemini.is_ai_available() and count <= settings.AI_MAX_ITEMS_PER_CALL:
+    if gemini.is_ai_available() and count <= settings.AI_MAX_ITEMS_PER_CALL and module != "writing":
         try:
             items = gemini.generate_json(_gemini_session_prompt(module, mode, count, profile), system_instruction="You generate original IELTS-style practice material only. Output valid JSON.", use_cache=False)
             if isinstance(items, dict):
@@ -617,10 +919,9 @@ def generate_session(profile: dict | None, module: str, mode: str, count: int | 
                 raise RuntimeError("Gemini returned no valid questions")
             items = _ensure_writing_chart(items) if module == "writing" else items
             if len(items) < count:
-                fallback_session = _build_fallback_session(module, mode, count, bands, profile_test_type(profile))
+                fallback_session = _build_fallback_session(module, mode, count, bands, profile_test_type(profile), profile)
                 existing_titles = {str(it.get("title") or "").lower() for it in items}
                 filler_pool = list(fallback_session.get("items", []))
-                random.shuffle(filler_pool)
                 filler_index = 0
                 while len(items) < count and filler_pool:
                     filler = dict(filler_pool[filler_index % len(filler_pool)])
@@ -648,10 +949,10 @@ def generate_session(profile: dict | None, module: str, mode: str, count: int | 
                 "source": provider,
             }
         except Exception:
-            session = _build_fallback_session(module, mode, count, bands, profile_test_type(profile))
+            session = _build_fallback_session(module, mode, count, bands, profile_test_type(profile), profile)
             session["pipeline"] = pipeline_steps
     else:
-        session = _build_fallback_session(module, mode, count, bands, profile_test_type(profile))
+        session = _build_fallback_session(module, mode, count, bands, profile_test_type(profile), profile)
         session["pipeline"] = pipeline_steps
     return session
 

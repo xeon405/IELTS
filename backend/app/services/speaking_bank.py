@@ -11,15 +11,15 @@ effectively unlimited ("~500 questions or AI-generated equivalents").
 from typing import Any
 
 SPEAKING_QUESTION_TYPES = [
-    "Part 1 Interview (personal questions)",
-    "Part 2 Cue Card (long turn)",
-    "Part 3 Discussion (abstract questions)",
+    "Part 1 — Introduction & Interview (personal questions)",
+    "Part 2 — Cue Card / Individual Long Turn",
+    "Part 3 — Discussion (abstract questions)",
 ]
 
 PART_TYPES = {
-    "Part 1 Interview (personal questions)": "Part 1",
-    "Part 2 Cue Card (long turn)": "Part 2",
-    "Part 3 Discussion (abstract questions)": "Part 3",
+    "Part 1 — Introduction & Interview (personal questions)": "Part 1",
+    "Part 2 — Cue Card / Individual Long Turn": "Part 2",
+    "Part 3 — Discussion (abstract questions)": "Part 3",
     "Part 1": "Part 1",
     "Part 2": "Part 2",
     "Part 3": "Part 3",

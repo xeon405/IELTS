@@ -11,31 +11,56 @@ effectively unlimited ("~500 questions or AI-generated equivalents").
 from typing import Any
 
 WRITING_QUESTION_TYPES = [
-    "Task 1 Report (Data)",
-    "Task 1 Process / Map",
+    "Task 1 Charts & Graphs",
+    "Task 1 Tables",
+    "Task 1 Mixed Charts",
+    "Task 1 Process",
+    "Task 1 Maps / Plans",
+    "Task 1 Diagrams",
     "Task 2 Opinion",
     "Task 2 Discussion",
     "Task 2 Advantages / Disadvantages",
     "Task 2 Problem / Solution",
     "Task 2 Double Question",
+    "Task 2 Mixed / Combined Question",
 ]
 
-TASK_1_TYPES = ["Task 1 Report (Data)", "Task 1 Process / Map"]
+TASK_1_TYPES = [
+    "Task 1 Charts & Graphs",
+    "Task 1 Tables",
+    "Task 1 Mixed Charts",
+    "Task 1 Process",
+    "Task 1 Maps / Plans",
+    "Task 1 Diagrams",
+]
 TASK_2_TYPES = [
     "Task 2 Opinion",
     "Task 2 Discussion",
     "Task 2 Advantages / Disadvantages",
     "Task 2 Problem / Solution",
     "Task 2 Double Question",
+    "Task 2 Mixed / Combined Question",
 ]
 
 ESSAY_MODE_TYPES = {
-    "Full Writing Section": ["Task 1 Report (Data)", "Task 2 Opinion"],
+    "Full Writing Section": ["Task 1 Charts & Graphs", "Task 2 Opinion"],
     "Task 1": TASK_1_TYPES,
     "Task 2": TASK_2_TYPES,
     "Essay Types": WRITING_QUESTION_TYPES,
     "Quick Practice": ["Task 2 Opinion"],
     "Individual Question Types": WRITING_QUESTION_TYPES,
+}
+
+# Old small-bank pools still carry the legacy group labels; new official
+# labels reuse the closest pool so every category always has items.
+_LEGACY_ALIASES = {
+    "Task 1 Charts & Graphs": "Task 1 Report (Data)",
+    "Task 1 Tables": "Task 1 Report (Data)",
+    "Task 1 Mixed Charts": "Task 1 Report (Data)",
+    "Task 1 Diagrams": "Task 1 Report (Data)",
+    "Task 1 Process": "Task 1 Process / Map",
+    "Task 1 Maps / Plans": "Task 1 Process / Map",
+    "Task 2 Mixed / Combined Question": "Task 2 Double Question",
 }
 
 WRITING_BY_TYPE: dict[str, list[dict[str, Any]]] = {}
@@ -510,13 +535,14 @@ WRITING_BY_TYPE = REGISTERED
 
 
 def items_for_type(type_label: str) -> list[Item]:
-    return list(WRITING_BY_TYPE.get(type_label, []))
+    pool_label = _LEGACY_ALIASES.get(type_label, type_label)
+    return list(WRITING_BY_TYPE.get(pool_label, []))
 
 
 def mixed_items() -> list[Item]:
     flat: list[Item] = []
     for type_label in WRITING_QUESTION_TYPES:
-        flat.extend(WRITING_BY_TYPE[type_label])
+        flat.extend(items_for_type(type_label))
     return flat
 
 

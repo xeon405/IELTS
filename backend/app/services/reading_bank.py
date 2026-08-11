@@ -11,23 +11,27 @@ from typing import Any
 
 READING_QUESTION_TYPES = [
     "Multiple Choice",
+    "True / False / Not Given",
+    "Yes / No / Not Given",
+    "Matching Information",
     "Matching Headings",
     "Matching Features",
     "Matching Sentence Endings",
-    "True / False / Not Given",
-    "Yes / No / Not Given",
-    "Summary Completion",
     "Sentence Completion",
+    "Summary Completion",
+    "Note Completion",
+    "Table Completion",
+    "Flow-chart Completion",
+    "Diagram Label Completion",
     "Short Answer",
-    "Table / Flow Chart Completion",
 ]
 
 # Question types typically used on each official passage slot.
 PASSAGE_TYPES = {
     "Full Reading Section": READING_QUESTION_TYPES,
     "Passage 1": ["True / False / Not Given", "Sentence Completion", "Short Answer", "Multiple Choice"],
-    "Passage 2": ["Matching Headings", "Summary Completion", "Matching Features", "Matching Sentence Endings"],
-    "Passage 3": ["Yes / No / Not Given", "Matching Sentence Endings", "Table / Flow Chart Completion", "Multiple Choice"],
+    "Passage 2": ["Matching Headings", "Summary Completion", "Table Completion", "Flow-chart Completion", "Multiple Choice"],
+    "Passage 3": ["Yes / No / Not Given", "Matching Sentence Endings", "Matching Features", "Matching Information", "Diagram Label Completion", "Short Answer"],
     "Quick Practice": ["Short Answer", "True / False / Not Given", "Multiple Choice"],
     "Individual Question Types": READING_QUESTION_TYPES,
 }
@@ -805,14 +809,26 @@ QUICK_MIX = [
 ]
 
 
+_TYPED_ALIASES = {
+    "Table Completion": "Table / Flow Chart Completion",
+    "Flow-chart Completion": "Table / Flow Chart Completion",
+    "Matching Information": "Matching Information",
+    "Note Completion": "Note Completion",
+    "Diagram Label Completion": "Diagram Label Completion",
+}
+
+
 def items_for_type(type_label: str) -> list[Item]:
-    return list(READING_BY_TYPE.get(type_label, []))
+    items = list(READING_BY_TYPE.get(type_label, []))
+    if not items and type_label in _TYPED_ALIASES:
+        items = list(READING_BY_TYPE.get(_TYPED_ALIASES[type_label], []))
+    return items
 
 
 def mixed_items() -> list[Item]:
     flat: list[Item] = []
     for type_label in READING_QUESTION_TYPES:
-        flat.extend(READING_BY_TYPE[type_label])
+        flat.extend(items_for_type(type_label))
     return flat
 
 
@@ -825,7 +841,8 @@ def items_for_mode(mode: str) -> list[Item]:
     types = PASSAGE_TYPES.get(mode, READING_QUESTION_TYPES)
     flat: list[Item] = []
     for type_label in types:
-        flat.extend(READING_BY_TYPE[type_label])
+        flat.extend(items_for_type(type_label))
+    return flat
     return flat
 
 

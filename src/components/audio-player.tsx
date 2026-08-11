@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Headphones, Lock, Pause, Play, Volume2 } from "lucide-react";
+import { Headphones, Loader2, Lock, Pause, Play, Volume2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { API_BASE, getToken, speakText } from "@/lib/backend";
 
 const WORDS_PER_SECOND = 2.4;
 
@@ -22,10 +23,15 @@ export function AudioPlayer({ script, examLocked = false }: { script: string; ex
   const [finished, setFinished] = useState(false);
   const [locked, setLocked] = useState(false);
   const [revealed, setRevealed] = useState(false);
-  const [noVoice, setNoVoice] = useState(false);
+  const [noAudio, setNoAudio] = useState(false);
+  const [preparing, setPreparing] = useState(false);
+  const [sourceUrl, setSourceUrl] = useState<string | null>(null);
   const durationSeconds = estimateSeconds(script);
   const timerRef = useRef<number | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const objectUrlRef = useRef<string | null>(null);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const preparingRef = useRef(false);
 
   const complete = useCallback(() => {
     setPlaying(false);
@@ -34,25 +40,19 @@ export function AudioPlayer({ script, examLocked = false }: { script: string; ex
     if (examLocked) setLocked(true);
   }, [examLocked]);
 
-  useEffect(() => {
-    if (playing) {
-      timerRef.current = window.setInterval(() => {
-        setElapsed((current) => {
-          const next = current + 1;
-          if (next >= durationSeconds) {
-            window.clearInterval(timerRef.current ?? undefined);
-            setPlaying(false);
-          }
-          return next;
-        });
-      }, 250);
+  const stopAll = useCallback(() => {
+    if (timerRef.current) {
+      window.clearInterval(timerRef.current);
+      timerRef.current = null;
     }
-    return () => {
-      if (timerRef.current) window.clearInterval(timerRef.current);
-    };
-  }, [playing, durationSeconds]);
-
-  const stopSpeech = useCallback(() => {
+    try {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
+    } catch {
+      /* noop */
+    }
     try {
       if (utteranceRef.current) {
         window.speechSynthesis.cancel();
@@ -65,46 +65,127 @@ export function AudioPlayer({ script, examLocked = false }: { script: string; ex
 
   useEffect(() => {
     return () => {
-      if (timerRef.current) window.clearInterval(timerRef.current);
-      stopSpeech();
+      stopAll();
+      if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
     };
-  }, [stopSpeech]);
+  }, [stopAll]);
 
-  function toggle() {
-    if (locked || finished) return;
+  useEffect(() => {
+    if (sourceUrl && audioRef.current) {
+      const element = audioRef.current;
+      element.onended = complete;
+      element.onerror = () => {
+        setNoAudio(true);
+        setPlaying(false);
+      };
+      element
+        .play()
+        .then(() => setPlaying(true))
+        .catch(() => {
+          setNoAudio(true);
+          setPlaying(false);
+        });
+    }
+  }, [sourceUrl, complete]);
+
+  useEffect(() => {
     if (playing) {
-      try {
-        window.speechSynthesis.pause();
-      } catch {
-        /* noop */
-      }
+      timerRef.current = window.setInterval(() => {
+        setElapsed((current) => {
+          const next = current + 1;
+          if (next >= durationSeconds) {
+            window.clearInterval(timerRef.current ?? undefined);
+            timerRef.current = null;
+            setPlaying(false);
+          }
+          return next;
+        });
+      }, 250);
+    } else if (timerRef.current) {
+      window.clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    return () => {
+      if (timerRef.current) window.clearInterval(timerRef.current);
+    };
+  }, [playing, durationSeconds]);
+
+  useEffect(() => {
+    setFinished(false);
+    setLocked(false);
+    setRevealed(false);
+    setElapsed(0);
+    setNoAudio(false);
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
+    }
+    setSourceUrl(null);
+    stopAll();
+  }, [script, stopAll]);
+
+  function playServerAudio(blob: Blob) {
+    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+    const url = URL.createObjectURL(blob);
+    objectUrlRef.current = url;
+    setSourceUrl(url);
+    setNoAudio(false);
+  }
+
+  function playBrowserTTS() {
+    if (!speechSupported()) {
+      setNoAudio(true);
       setPlaying(false);
       return;
     }
+    try {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(script);
+      utterance.rate = 1;
+      utterance.pitch = 1;
+      utterance.volume = 1;
+      utterance.lang = "en-GB";
+      utterance.onend = complete;
+      utterance.onerror = complete;
+      utteranceRef.current = utterance;
+      window.speechSynthesis.speak(utterance);
+      setPlaying(true);
+    } catch {
+      setNoAudio(true);
+      setPlaying(false);
+    }
+  }
+
+  async function toggle() {
+    if (locked || finished || preparing) return;
+    if (playing) {
+      stopAll();
+      setPlaying(false);
+      return;
+    }
+    if (preparingRef.current) return;
+    preparingRef.current = true;
+    setPreparing(true);
+    setNoAudio(false);
     setElapsed(0);
-    setPlaying(true);
-    if (speechSupported()) {
-      try {
-        window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(script);
-        utterance.rate = 1;
-        utterance.pitch = 1;
-        utterance.volume = 1;
-        utterance.lang = "en-GB";
-        utterance.onend = complete;
-        utterance.onerror = complete;
-        utteranceRef.current = utterance;
-        window.speechSynthesis.speak(utterance);
-      } catch {
-        setNoVoice(true);
+    try {
+      const blob = await speakText(script.length > 1900 ? script.slice(0, 1900) : script);
+      if (blob) {
+        playServerAudio(blob);
+        return;
       }
-    } else {
-      setNoVoice(true);
+      playBrowserTTS();
+    } catch {
+      playBrowserTTS();
+    } finally {
+      preparingRef.current = false;
+      setPreparing(false);
     }
   }
 
   function reset() {
-    stopSpeech();
+    stopAll();
     setPlaying(false);
     setElapsed(0);
     setFinished(false);
@@ -126,14 +207,15 @@ export function AudioPlayer({ script, examLocked = false }: { script: string; ex
 
   return (
     <div className="rounded-2xl border border-[#e3dac6] bg-white/70 p-4">
+      <audio ref={audioRef} src={sourceUrl ?? undefined} preload="auto" className="pointer-events-none absolute -left-96 h-10 w-10 opacity-0" />
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
         <button
           onClick={toggle}
-          disabled={locked || finished}
+          disabled={locked || finished || preparing}
           className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-[#17342f] text-white transition hover:bg-[#245f5a] disabled:opacity-50"
           aria-label={playing ? "Pause audio" : "Play audio"}
         >
-          {playing ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
+          {preparing ? <Loader2 className="h-5 w-5 animate-spin" /> : playing ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
         </button>
 
         <div className="min-w-0 flex-1">
@@ -170,9 +252,9 @@ export function AudioPlayer({ script, examLocked = false }: { script: string; ex
         </div>
       </div>
 
-      {noVoice ? (
+      {noAudio ? (
         <p className="mt-3 text-xs font-semibold text-[#8b8f88]">
-          This browser cannot read audio aloud — the script appears below and the timer still follows the listening duration.
+          Audio is unavailable in this browser — the script appears below and the timer still follows the listening duration.
         </p>
       ) : null}
 

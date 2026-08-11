@@ -147,11 +147,20 @@ def _is_prod() -> bool:
 
 
 def _send_email(to_email: str, subject: str, body: str) -> bool:
+    """Deliver an email via Resend (preferred) or SMTP (fallback).
+
+    Returns True when the provider accepted the message. When nothing is
+    configured, the message is logged instead and False is returned so the
+    caller can fall back to a development on-screen code.
+    """
     if settings.RESEND_API_KEY:
         try:
             response = httpx.post(
                 "https://api.resend.com/emails",
-                headers={"Authorization": f"Bearer {settings.RESEND_API_KEY}"},
+                headers={
+                    "Authorization": f"Bearer {settings.RESEND_API_KEY}",
+                    "User-Agent": "ai-ielts-examiner/1.0",
+                },
                 json={
                     "from": settings.RESEND_FROM,
                     "to": [to_email],
@@ -162,7 +171,9 @@ def _send_email(to_email: str, subject: str, body: str) -> bool:
             )
             if response.status_code < 400:
                 return True
-            logger.warning("[email] Resend API rejected: %s %s", response.status_code, response.text[:300])
+            logger.warning(
+                "[email] Resend API rejected (%s): %s", response.status_code, response.text[:500]
+            )
         except Exception as exc:  # noqa: BLE001
             logger.warning("[email] Resend API send failed: %s", exc)
     if not settings.SMTP_HOST:
@@ -186,18 +197,29 @@ def _send_email(to_email: str, subject: str, body: str) -> bool:
         return False
 
 
-def _issue_verification(db: Session, user: models.User) -> str:
+def _email_configured() -> bool:
+    """True when real delivery is set up (Resend key or SMTP credentials)."""
+    return bool(settings.RESEND_API_KEY or settings.SMTP_HOST)
+
+
+def _issue_verification(db: Session, user: models.User) -> tuple[str, bool]:
+    """Store a fresh 6-digit code and try to email it.
+
+    Returns (code, delivered). ``delivered`` is True when the email provider
+    accepted the message; when False the caller may expose the code on screen
+    as a development fallback.
+    """
     code = _verification_code()
     user.email_verified = False
     user.verification_code = code
     user.verification_code_expires = datetime.now(timezone.utc) + timedelta(hours=24)
     db.commit()
-    _send_email(
+    delivered = _send_email(
         user.email,
         "Verify your IELTS Examiner email",
         f"Your IELTS Examiner verification code is: {code}\n\nEnter it on the login screen to activate your account. It expires in 24 hours.",
     )
-    return code
+    return code, (delivered or _email_configured() is False)
 
 
 def _verify_code(user: models.User, code: str) -> bool:
@@ -232,11 +254,13 @@ def register(
     db.add(models.StudentProfile(user_id=user.id))
     db.add(models.Settings(user_id=user.id))
     db.commit()
-    code = _issue_verification(db, user)
+    code, delivered = _issue_verification(db, user)
     return RegisterResponse(
         requires_verification=True,
-        message="Almost there. Enter the 6-digit code sent to your email to activate your account.",
-        dev_code=None if _is_prod() else code,
+        message="Almost there. Enter the 6-digit code sent to your email to activate your account."
+        if delivered
+        else "Couldn't reach your inbox yet — try the resend button in a moment.",
+        dev_code=None if (delivered or _is_prod()) else code,
     )
 
 
@@ -277,10 +301,12 @@ def resend_verification(
         return ResendResponse(message="If that email is registered, a new code has been sent.")
     if user.email_verified:
         return ResendResponse(message="This email is already verified — log in to continue.")
-    code = _issue_verification(db, user)
+    code, delivered = _issue_verification(db, user)
     return ResendResponse(
-        message="A new 6-digit verification code has been sent.",
-        dev_code=None if _is_prod() else code,
+        message="A new 6-digit verification code has been sent."
+        if delivered
+        else "Couldn't reach your inbox yet — try again in a moment.",
+        dev_code=None if (delivered or _is_prod()) else code,
     )
 
 
@@ -324,6 +350,15 @@ def forgot_password(
         expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
     ))
     db.commit()
+    frontend = (settings.FRONTEND_URL or "http://localhost:4000").rstrip("/")
+    reset_link = f"{frontend}/forgot-password?token={token}&email={user.email}"
+    _send_email(
+        user.email,
+        "Reset your IELTS Examiner password",
+        "We received a request to reset the password for your IELTS Examiner account.\n\n"
+        f"Open this link to choose a new password (valid for 24 hours):\n{reset_link}\n\n"
+        "If you did not ask for a reset, you can safely ignore this email.",
+    )
     message = f"Use this one-time code to reset your password: {token}"
     if _is_prod():
         message = "If that email is registered, a reset link has been sent."

@@ -109,6 +109,19 @@ class ResendResponse(BaseModel):
     dev_code: str | None = None
 
 
+class TranscribeRequest(BaseModel):
+    """A base64-encoded voice recording (WAV/WebM/MP4) to transcribe with Whisper."""
+
+    audio: str
+    mime: str = "audio/wav"
+
+
+class TTSRequest(BaseModel):
+    """Plain text to synthesize into MP3 listening audio."""
+
+    text: str
+
+
 class BrainRequest(BaseModel):
     profile: dict[str, Any] | None = None
     module: str | None = None

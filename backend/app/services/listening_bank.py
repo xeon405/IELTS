@@ -11,20 +11,25 @@ from typing import Any
 
 LISTENING_QUESTION_TYPES = [
     "Multiple Choice",
-    "Map Labelling",
-    "Form / Note Completion",
-    "Sentence Completion",
     "Matching",
+    "Map / Plan / Diagram Labelling",
+    "Form Completion",
+    "Note Completion",
+    "Table Completion",
+    "Flow-chart Completion",
+    "Summary Completion",
+    "Sentence Completion",
+    "Short Answer",
 ]
 
 # Question types typically used on each official part slot.
 PART_TYPES = {
     "Full Listening Section": LISTENING_QUESTION_TYPES,
-    "Part 1": ["Form / Note Completion"],
-    "Part 2": ["Map Labelling", "Multiple Choice"],
-    "Part 3": ["Matching", "Multiple Choice", "Form / Note Completion"],
-    "Part 4": ["Sentence Completion", "Multiple Choice"],
-    "Quick Practice": ["Multiple Choice", "Form / Note Completion", "Sentence Completion"],
+    "Part 1": ["Form Completion", "Note Completion", "Multiple Choice"],
+    "Part 2": ["Map / Plan / Diagram Labelling", "Multiple Choice", "Table Completion"],
+    "Part 3": ["Matching", "Multiple Choice", "Sentence Completion", "Short Answer"],
+    "Part 4": ["Sentence Completion", "Multiple Choice", "Summary Completion", "Flow-chart Completion"],
+    "Quick Practice": ["Multiple Choice", "Form Completion", "Sentence Completion"],
     "Individual Question Types": LISTENING_QUESTION_TYPES,
 }
 
@@ -734,14 +739,28 @@ QUICK_MIX = [
 ]
 
 
+_TYPED_ALIASES = {
+    "Form Completion": "Form / Note Completion",
+    "Note Completion": "Form / Note Completion",
+    "Table Completion": "Form / Note Completion",
+    "Flow-chart Completion": "Form / Note Completion",
+    "Summary Completion": "Form / Note Completion",
+    "Short Answer": "Short Answer",
+    "Map / Plan / Diagram Labelling": "Map Labelling",
+}
+
+
 def items_for_type(type_label: str) -> list[Item]:
-    return list(LISTENING_BY_TYPE.get(type_label, []))
+    items = list(LISTENING_BY_TYPE.get(type_label, []))
+    if not items and type_label in _TYPED_ALIASES:
+        items = list(LISTENING_BY_TYPE.get(_TYPED_ALIASES[type_label], []))
+    return items
 
 
 def mixed_items() -> list[Item]:
     flat: list[Item] = []
     for type_label in LISTENING_QUESTION_TYPES:
-        flat.extend(LISTENING_BY_TYPE[type_label])
+        flat.extend(items_for_type(type_label))
     return flat
 
 
@@ -754,5 +773,5 @@ def items_for_mode(mode: str) -> list[Item]:
     types = PART_TYPES.get(mode, LISTENING_QUESTION_TYPES)
     flat: list[Item] = []
     for type_label in types:
-        flat.extend(LISTENING_BY_TYPE[type_label])
+        flat.extend(items_for_type(type_label))
     return flat

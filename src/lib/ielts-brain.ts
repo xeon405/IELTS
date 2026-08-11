@@ -35,6 +35,23 @@ export interface PracticeItem {
   suggestions?: string;
   bandAdvice?: string;
   chart?: ChartSpec;
+  typeLabel?: string;
+  sectionLabel?: string;
+  examSection?: string;
+  topicLabel?: string;
+  cardCategory?: string;
+  bullets?: string[];
+  suggestedMinutes?: number;
+  difficultyBand?: number;
+  adaptiveReason?: string;
+}
+
+export interface PracticalMockPaper {
+  id: string;
+  number: number;
+  title: string;
+  totalMinutes: number;
+  sections: Partial<Record<Skill, PracticeSession>>;
 }
 
 export interface PracticeSession {
@@ -135,6 +152,9 @@ export interface EvaluationResult {
   speed?: PerformanceMetric;
   timeManagement?: PerformanceMetric;
   timing?: TimingDetail;
+  judges?: { judge: string; band: number }[];
+  judgeAgreement?: number | null;
+  confidence?: number | null;
 }
 
 export interface ItemFeedback {
@@ -146,6 +166,18 @@ export interface ItemFeedback {
     verdict: string;
     idealAnswer: string;
     sampleHighBandAnswer?: string;
+    spotCorrection?: string;
+speakingTeach?: {
+      corrected?: string;
+      lengthRule?: string;
+      passage?: { text: string; tag: "good" | "improve"; tip?: string }[];
+      originalPassage?: { text: string; tag: "good" | "improve"; tip?: string }[];
+      lines?: { n: number; quote: string; problem: string; fix: string }[];
+      grammar?: { sentence: string; issue: string; say: string }[];
+      vocabulary?: { word: string; better: string; why: string }[];
+      fillers?: { word: string; line: number }[];
+      changes?: string[];
+    } | null;
     criteria?: { criterion: string; band: number; comment: string }[];
     explanation: string;
     logic: string;
@@ -156,6 +188,24 @@ export interface ItemFeedback {
     textAnalysis?: TextAnalysis | null;
     fillerAdvice?: string;
   };
+}
+
+export interface TypedGuideStep {
+  label: string;
+  text: string;
+}
+
+export interface TypedGuide {
+  group: string;
+  name: string;
+  official?: string;
+  steps: TypedGuideStep[];
+  band8: string;
+  avoid: string;
+  tip?: string;
+  length?: string;
+  relevance?: string;
+  priority?: number;
 }
 
 export interface ReadingBlueprint {
@@ -169,47 +219,62 @@ export interface ReadingBlueprint {
   bandTips: Record<string, string>;
   tipsToImprove: string[];
   grammarVocab: string;
+  typeGuides?: TypedGuide[];
 }
 
 export const readingQuestionTypes = [
   "Multiple Choice",
+  "True / False / Not Given",
+  "Yes / No / Not Given",
+  "Matching Information",
   "Matching Headings",
   "Matching Features",
   "Matching Sentence Endings",
-  "True / False / Not Given",
-  "Yes / No / Not Given",
-  "Summary Completion",
   "Sentence Completion",
+  "Summary Completion",
+  "Note Completion",
+  "Table Completion",
+  "Flow-chart Completion",
+  "Diagram Label Completion",
   "Short Answer",
-  "Table / Flow Chart Completion",
 ] as const;
 
 export const listeningQuestionTypes = [
   "Multiple Choice",
-  "Map Labelling",
-  "Form / Note Completion",
-  "Sentence Completion",
   "Matching",
+  "Map / Plan / Diagram Labelling",
+  "Form Completion",
+  "Note Completion",
+  "Table Completion",
+  "Flow-chart Completion",
+  "Summary Completion",
+  "Sentence Completion",
+  "Short Answer",
 ] as const;
 
 export type ListeningQuestionType = (typeof listeningQuestionTypes)[number];
 
 export const writingQuestionTypes = [
-  "Task 1 Report (Data)",
-  "Task 1 Process / Map",
+  "Task 1 Charts & Graphs",
+  "Task 1 Tables",
+  "Task 1 Mixed Charts",
+  "Task 1 Process",
+  "Task 1 Maps / Plans",
+  "Task 1 Diagrams",
   "Task 2 Opinion",
   "Task 2 Discussion",
   "Task 2 Advantages / Disadvantages",
   "Task 2 Problem / Solution",
   "Task 2 Double Question",
+  "Task 2 Mixed / Combined Question",
 ] as const;
 
 export type WritingQuestionType = (typeof writingQuestionTypes)[number];
 
 export const speakingQuestionTypes = [
-  "Part 1 Interview (personal questions)",
-  "Part 2 Cue Card (long turn)",
-  "Part 3 Discussion (abstract questions)",
+  "Part 1 — Introduction & Interview (personal questions)",
+  "Part 2 — Cue Card / Individual Long Turn",
+  "Part 3 — Discussion (abstract questions)",
 ] as const;
 
 export type SpeakingQuestionType = (typeof speakingQuestionTypes)[number];
@@ -290,7 +355,7 @@ const defaultProfile: StudentLearningProfile = {
     "True / False / Not Given",
     "Task 2 Coherence",
     "Speaking Fluency",
-    "Map Labelling",
+    "Map / Plan / Diagram Labelling",
   ],
   weakTopics: [
     "Urban development",
@@ -367,8 +432,8 @@ const practiceBlueprints: Record<Skill, PracticeSession[]> = {
       title: "Urban Canopies and the Cooling City",
       subtitle: "Adaptive passage built for Matching Headings and inference control.",
       durationMinutes: 20,
-      questionCount: 13,
-      questionTypes: ["Matching Headings", "True / False / Not Given", "Sentence Completion"],
+      questionCount: 14,
+      questionTypes: ["Matching Headings", "True / False / Not Given", "Yes / No / Not Given", "Sentence Completion"],
       difficultyBand: 6.5,
       examinerIntent:
         "Test whether the student can separate topic sentences from supporting examples under Band 7 reading pressure.",
@@ -411,6 +476,23 @@ const practiceBlueprints: Record<Skill, PracticeSession[]> = {
           tip: "'Did not claim' is a Not Given signal, not a contradiction.",
           suggestions: "Never answer from real-world knowledge; the text is the only evidence.",
           bandAdvice: "Not Given vs False discrimination is worth a full band at 6.5 — it is the most common trap in Reading.",
+        },
+        {
+          id: "r2b",
+          type: "multiple-choice",
+          title: "Yes / No / Not Given",
+          context:
+            "Interviewed after the Lisbon trial, the team argued that pleasant public spaces, rather than shade alone, drive how long people choose to stay outside. They stopped short of linking the findings to any change in shopping habits.",
+          prompt: "The researchers believe that factors other than shade influence how long people spend outside.",
+          options: ["Yes", "No", "Not Given"],
+          expectedFocus: "Judge the writer's opinion, not the facts themselves.",
+          descriptorFocus: "Reading: distinguishing the writer's views (Yes/No) from factual claims (True/False).",
+          correctAnswer: "Yes",
+          explanation: "'The team argued that pleasant public spaces, rather than shade alone, drive how long people stay' — an opinion match, so Yes.",
+          logic: "1. Question asks about the WRITER'S VIEW (belief). 2. The team 'argued' that pleasant public spaces, not shade alone, drive staying. 3. The text presents that as their belief -> Yes.",
+          tip: "Yes/No items ask about opinions ('the writer believes'); True/False items ask about facts. Check WHICH one you are answering.",
+          suggestions: "Underline 'argued', 'believes', 'claims' — opinion verbs mean Yes/No, fact verbs mean True/False.",
+          bandAdvice: "Mixing Yes/No with True/False answer keys is one of the most common Band 6.5 reading errors.",
         },
         {
           id: "r3",
@@ -655,7 +737,7 @@ const practiceBlueprints: Record<Skill, PracticeSession[]> = {
       subtitle: "Map labelling and distractor handling for everyday public information.",
       durationMinutes: 10,
       questionCount: 10,
-      questionTypes: ["Map Labelling", "Multiple Choice", "Short Answer"],
+      questionTypes: ["Map / Plan / Diagram Labelling", "Multiple Choice", "Short Answer"],
       difficultyBand: 6.5,
       examinerIntent: "Train attention to correction phrases and spatial language.",
       items: [
@@ -700,7 +782,7 @@ const practiceBlueprints: Record<Skill, PracticeSession[]> = {
       subtitle: "Part 1 form completion through Part 4 academic lecture practice.",
       durationMinutes: 30,
       questionCount: 40,
-      questionTypes: ["Form Completion", "Map Labelling", "Matching", "Sentence Completion"],
+      questionTypes: ["Form Completion", "Map / Plan / Diagram Labelling", "Matching", "Sentence Completion"],
       difficultyBand: 7,
       examinerIntent: "Build stamina across social and academic listening contexts.",
       items: [
@@ -828,11 +910,11 @@ const practiceBlueprints: Record<Skill, PracticeSession[]> = {
       id: "listening-question-type",
       module: "listening",
       mode: "Individual Question Types",
-      title: "Map Labelling Focus",
-      subtitle: "Targeted map labelling and spatial language sets.",
+      title: "Map / Plan / Diagram Labelling Focus",
+      subtitle: "Targeted labelling and spatial language sets.",
       durationMinutes: 12,
       questionCount: 6,
-      questionTypes: ["Map Labelling", "Multiple Choice"],
+      questionTypes: ["Map / Plan / Diagram Labelling", "Multiple Choice"],
       difficultyBand: 6.5,
       examinerIntent: "Isolate spatial language and correction phrases.",
       items: [
@@ -919,8 +1001,10 @@ const practiceBlueprints: Record<Skill, PracticeSession[]> = {
           id: "wf1",
           type: "essay",
           title: "Task 1 Report",
+          examSection: "Task 1",
+          suggestedMinutes: 20,
           prompt:
-            "The line graph shows changes in public transport use in three cities from 2000 to 2025. Summarise the main features and make comparisons where relevant.",
+            "The line graph shows changes in public transport use in three cities from 2000 to 2025. Summarise the main features and make comparisons where relevant. Write at least 150 words.",
           expectedFocus: "Include an overview, key trends, and selected data comparisons.",
           descriptorFocus: "Writing Task 1: achievement, coherence, lexical range, grammar accuracy.",
         },
@@ -928,8 +1012,10 @@ const practiceBlueprints: Record<Skill, PracticeSession[]> = {
           id: "wf2",
           type: "essay",
           title: "Task 2 Essay",
+          examSection: "Task 2",
+          suggestedMinutes: 40,
           prompt:
-            "Governments should spend more money on preventing environmental problems than on repairing damage after it occurs. To what extent do you agree or disagree?",
+            "Governments should spend more money on preventing environmental problems than on repairing damage after it occurs. To what extent do you agree or disagree? Write at least 250 words.",
           expectedFocus: "State a position and develop it with relevant examples.",
           descriptorFocus: "Writing Task 2: response depth and argument control.",
         },
@@ -1014,14 +1100,14 @@ const practiceBlueprints: Record<Skill, PracticeSession[]> = {
       subtitle: "Cue-card practice for fluency, lexical flexibility, and natural extension.",
       durationMinutes: 4,
       questionCount: 1,
-      questionTypes: ["Part 2 Cue Card", "Fluency", "Pronunciation Awareness"],
+      questionTypes: ["Part 2 — Cue Card / Individual Long Turn", "Fluency", "Pronunciation Awareness"],
       difficultyBand: 6.5,
       examinerIntent: "Encourage a two-minute answer with connected details rather than memorized phrases.",
       items: [
         {
           id: "s1",
           type: "speaking-cue",
-          title: "Part 2 Cue Card",
+          title: "Part 2 — Cue Card / Individual Long Turn",
           prompt:
             "Describe a place where you can concentrate well. You should say where it is, what you do there, why it helps you focus, and how you feel after spending time there.",
           expectedFocus: "Speak in connected story stages with reasons and examples.",
@@ -1045,7 +1131,7 @@ const practiceBlueprints: Record<Skill, PracticeSession[]> = {
       subtitle: "Part 1 interview, Part 2 long turn, and Part 3 discussion.",
       durationMinutes: 14,
       questionCount: 12,
-      questionTypes: ["Part 1", "Part 2 Cue Card", "Part 3 Discussion"],
+      questionTypes: ["Part 1 — Introduction & Interview", "Part 2 — Cue Card / Individual Long Turn", "Part 3 — Discussion"],
       difficultyBand: 7,
       examinerIntent: "Check fluency consistency from familiar topics to abstract reasoning.",
       items: [
@@ -1127,14 +1213,14 @@ const practiceBlueprints: Record<Skill, PracticeSession[]> = {
       subtitle: "Cross-part fluency on one familiar topic.",
       durationMinutes: 8,
       questionCount: 3,
-      questionTypes: ["Part 1", "Part 2 Cue Card", "Part 3"],
+      questionTypes: ["Part 1 — Introduction & Interview", "Part 2 — Cue Card / Individual Long Turn", "Part 3 — Discussion"],
       difficultyBand: 6.5,
       examinerIntent: "Practise all three parts within one topic area.",
       items: [
         {
           id: "st1",
           type: "speaking-cue",
-          title: "Part 2 Cue Card",
+          title: "Part 2 — Cue Card / Individual Long Turn",
           prompt:
             "Describe something you do to help the environment. You should say what you do, how often you do it, why you started, and how it makes you feel.",
           expectedFocus: "Tell a connected story with sequence markers.",
@@ -1176,10 +1262,10 @@ const practiceBlueprints: Record<Skill, PracticeSession[]> = {
 };
 
 export const officialMockSections = [
-  { id: "listening" as const, label: "Listening", minutes: 30, questions: 40, note: "4 parts, audio played once" },
+  { id: "listening" as const, label: "Listening", minutes: 30, questions: 40, note: "4 sections · audio played once · +2 min to check answers" },
   { id: "reading" as const, label: "Reading", minutes: 60, questions: 40, note: "3 passages, no transfer time" },
-  { id: "writing" as const, label: "Writing", minutes: 60, questions: 2, note: "Task 1 and Task 2" },
-  { id: "speaking" as const, label: "Speaking", minutes: 14, questions: 12, note: "Part 1, Part 2, Part 3" },
+  { id: "writing" as const, label: "Writing", minutes: 60, questions: 2, note: "Task 1 (20 min) + Task 2 (40 min)" },
+  { id: "speaking" as const, label: "Speaking", minutes: 14, questions: 20, note: "12 + cue card + follow-up + 6" },
 ];
 
 export function createDefaultLearningProfile(): StudentLearningProfile {
@@ -1267,9 +1353,9 @@ const localReadingBlueprint: ReadingBlueprint = {
   title: "Reading Blueprint",
   tagline: "How to read strategically and earn more marks.",
   structure: [
-    { name: "Passage 1", detail: "Usually the easiest. Factual texts, 13 questions. Spend ~15-18 minutes.", topic: "Descriptive / factual" },
-    { name: "Passage 2", detail: "Medium difficulty. Argument and description, 13 questions. Spend ~20 minutes.", topic: "Argumentative / discursive" },
-    { name: "Passage 3", detail: "Hardest. Dense academic prose, 14 questions. Spend ~22-25 minutes.", topic: "Abstract / academic" },
+    { name: "Passage 1", detail: "Usually the easiest. Factual texts, typically around 13 questions. Spend ~15-18 minutes.", topic: "Descriptive / factual" },
+    { name: "Passage 2", detail: "Medium difficulty. Argument and description, typically around 13 questions. Spend ~20 minutes.", topic: "Argumentative / discursive" },
+    { name: "Passage 3", detail: "Hardest. Dense academic prose, typically around 14 questions. Spend ~22-25 minutes.", topic: "Abstract / academic" },
   ],
   scoring: [
     { correct: "39-40", band: "Band 9" },
@@ -1284,14 +1370,19 @@ const localReadingBlueprint: ReadingBlueprint = {
   ],
   questionTypes: [
     { name: "True / False / Not Given", strategy: "Find the exact sentence. True = same meaning; False = contradicts; Not Given = not mentioned.", time: "~90 seconds each", mistakes: "Confusing False with Not Given; using outside knowledge." },
-    { name: "Matching Headings", strategy: "Read the first and last sentence of each paragraph first, then the heading list.", time: "~60 seconds each", mistakes: "Matching a heading that only fits one detail, not the whole paragraph." },
-    { name: "Multiple Choice", strategy: "Skim the passage for keywords from each option before deciding.", time: "~60 seconds each", mistakes: "Choosing an option that is true in the text but does not answer the question." },
-    { name: "Summary / Sentence Completion", strategy: "Predict the part of speech and word limit (e.g. ONE WORD ONLY) before reading.", time: "~75 seconds each", mistakes: "Using more than the word limit or copying extra words." },
-    { name: "Short Answer", strategy: "Scan for the question words and copy exact words from the text.", time: "~60 seconds each", mistakes: "Answering in your own words instead of the words in the text." },
     { name: "Yes / No / Not Given", strategy: "Decide based on the writer's view, not facts you know from outside.", time: "~90 seconds each", mistakes: "Answering True/False instead of Yes/No; judging by your own opinion." },
+    { name: "Matching Information", strategy: "Identify which paragraph: skim for the key noun phrase, then scan each paragraph.", time: "~75 seconds each", mistakes: "Choosing a paragraph that mentions the word but not the information." },
+    { name: "Matching Headings", strategy: "Read the first and last sentence of each paragraph first, then the heading list.", time: "~60 seconds each", mistakes: "Matching a heading that only fits one detail, not the whole paragraph." },
     { name: "Matching Features", strategy: "Track names, dates and claims in a quick table as you read.", time: "~90 seconds each", mistakes: "Confusing which researcher/group said what." },
     { name: "Matching Sentence Endings", strategy: "Read the half-sentence, predict the end, then match meaning not exact words.", time: "~75 seconds each", mistakes: "Choosing an ending from a similar sentence that does not complete the logic." },
-    { name: "Table / Flow Chart Completion", strategy: "Read the row/column headers first and predict the missing cell.", time: "~60 seconds each", mistakes: "Answering the wrong row or copying beyond the word limit." },
+    { name: "Multiple Choice", strategy: "Skim the passage for keywords from each option before deciding.", time: "~60 seconds each", mistakes: "Choosing an option that is true in the text but does not answer the question." },
+    { name: "Sentence Completion", strategy: "Predict the part of speech and word limit (e.g. ONE WORD ONLY) before reading.", time: "~75 seconds each", mistakes: "Using more than the word limit or copying extra words." },
+    { name: "Summary Completion", strategy: "Read the finished summary first to predict each gap, then scan for paraphrases.", time: "~75 seconds each", mistakes: "Exceeding the word limit or copying a phrase that fits grammatically but not semantically." },
+    { name: "Note Completion", strategy: "Notes are telegraphic: predict the missing fact type (name, number, time).", time: "~60 seconds each", mistakes: "Adding words the note slot cannot take." },
+    { name: "Table Completion", strategy: "Read the row and column headers to predict each missing cell.", time: "~60 seconds each", mistakes: "Answering the wrong row or copying beyond the word limit." },
+    { name: "Flow-chart Completion", strategy: "Read the arrows: each gap continues the previous stage.", time: "~60 seconds each", mistakes: "Jumping stages or exceeding the word limit." },
+    { name: "Diagram Label Completion", strategy: "Use the diagram labels and arrows to predict what each label names.", time: "~60 seconds each", mistakes: "Labeling from general knowledge instead of the text." },
+    { name: "Short Answer", strategy: "Scan for the question words and copy exact words from the text.", time: "~60 seconds each", mistakes: "Answering in your own words instead of the words in the text." },
   ],
   timeManagement: [
     "Passage 1 is usually easiest: spend 15 minutes.",
@@ -1349,11 +1440,16 @@ const localListeningBlueprint: ReadingBlueprint = {
     { correct: "15-18", band: "Band 5" },
   ],
   questionTypes: [
-    { name: "Form / Note Completion", strategy: "Predict word type (name, number, time) by reading the gaps before the audio starts.", time: "~10 seconds each", mistakes: "Missing a plural 's' — it still counts." },
-    { name: "Map Labelling", strategy: "Trace the route with your finger. Listen for 'turn left', 'opposite', 'past the X'.", time: "~10 seconds each", mistakes: "Choosing a label heard earlier, not the one at the destination." },
+    { name: "Form Completion", strategy: "Predict word type (name, number, time) by reading the gaps before the audio starts.", time: "~10 seconds each", mistakes: "Missing a plural 's' — it still counts." },
+    { name: "Note Completion", strategy: "Read the note headings to predict each missing fact, then copy exactly as heard.", time: "~10 seconds each", mistakes: "Writing a synonym instead of the exact recorded word." },
+    { name: "Map / Plan / Diagram Labelling", strategy: "Trace the route with your finger. Listen for 'turn left', 'opposite', 'past the X'.", time: "~15 seconds each", mistakes: "Choosing a label heard earlier, not the one at the destination." },
     { name: "Multiple Choice", strategy: "Underline the difference between options before each section plays.", time: "~15 seconds each", mistakes: "Picking an option with a word you heard even if it was said negatively." },
     { name: "Matching", strategy: "Predict which names or features will be matched, then write letters as you hear them.", time: "~15 seconds each", mistakes: "Answering from memory instead of the recording." },
+    { name: "Table Completion", strategy: "Read row and column headers to predict the missing cell before the audio.", time: "~10 seconds each", mistakes: "Filling the right answer into the wrong row." },
+    { name: "Flow-chart Completion", strategy: "Follow the arrows; each gap continues the previous stage as heard.", time: "~10 seconds each", mistakes: "Swapping the order of stages." },
+    { name: "Summary Completion", strategy: "Read the summary as a whole; predict each gap before the audio plays.", time: "~15 seconds each", mistakes: "Exceeding the word limit or adding the article the summary does not allow." },
     { name: "Sentence Completion", strategy: "Predict how many words are allowed (e.g. ONE WORD ONLY) and keep the grammar correct.", time: "~10 seconds each", mistakes: "Adding a preposition the sentence does not need." },
+    { name: "Short Answer", strategy: "Read the question and predict the fact type (place, price, time).", time: "~10 seconds each", mistakes: "Adding detail the question does not ask for." },
   ],
   timeManagement: [
     "Use the 30 seconds before each section to read ALL the questions.",
@@ -1397,19 +1493,25 @@ const localWritingBlueprint: ReadingBlueprint = {
   scoring: [
     { correct: "Task 1", band: "One third of the Writing band" },
     { correct: "Task 2", band: "Two thirds of the Writing band" },
-    { correct: "Task Achievement", band: "25%" },
+    { correct: "Task 1: Task Achievement", band: "25%" },
+    { correct: "Task 2: Task Response", band: "25%" },
     { correct: "Coherence and Cohesion", band: "25%" },
     { correct: "Lexical Resource (Vocabulary)", band: "25%" },
     { correct: "Grammatical Range and Accuracy", band: "25%" },
   ],
   questionTypes: [
-    { name: "Task 1 Report (Data)", strategy: "Open with an overview sentence, then group data (highest/lowest, trends) into 2-3 body paragraphs. Never list every number.", time: "20 minutes", mistakes: "Copying numbers without an overview or comparisons." },
-    { name: "Task 1 Process / Map", strategy: "Describe the stages or changes in time order with linking words (first, then, subsequently). Include all stages; no opinion.", time: "20 minutes", mistakes: "Adding opinions or omitting a stage of the process." },
+    { name: "Task 1 Charts & Graphs", strategy: "Open with an overview sentence, then group data (highest/lowest, trends) into 2-3 body paragraphs. Never list every number.", time: "20 minutes", mistakes: "Copying numbers without an overview or comparisons." },
+    { name: "Task 1 Tables", strategy: "Group rows or columns (totals, highest/lowest) into 2-3 body paragraphs; compare across the table.", time: "20 minutes", mistakes: "Listing cells instead of comparing across rows." },
+    { name: "Task 1 Mixed Charts", strategy: "Describe each visual separately, then add one overview that compares across both.", time: "20 minutes", mistakes: "Writing two separate answers instead of one balanced report." },
+    { name: "Task 1 Process", strategy: "Describe the stages in time order with sequence markers (first, then, subsequently). Include the first and last stage; no opinion.", time: "20 minutes", mistakes: "Adding opinions or omitting a stage of the process." },
+    { name: "Task 1 Maps / Plans", strategy: "Describe how the place changed between the two periods with location language (north of, opposite, adjacent).", time: "20 minutes", mistakes: "Describing only one period or adding invented changes." },
+    { name: "Task 1 Diagrams", strategy: "Explain how the object works: name the parts, then describe the flow or mechanism in order.", time: "20 minutes", mistakes: "Describing the object instead of explaining how it works." },
     { name: "Task 2 Opinion", strategy: "State your position in the introduction and support it in every body paragraph; conclusion restates the position.", time: "40 minutes", mistakes: "Giving both sides without ever taking a clear position." },
     { name: "Task 2 Discussion", strategy: "Present both views fairly, then your own opinion in the conclusion or a dedicated paragraph.", time: "40 minutes", mistakes: "Burying the discussion in examples without explanation." },
     { name: "Task 2 Advantages / Disadvantages", strategy: "Balance one paragraph per side and conclude with a clear judgement of which outweighs.", time: "40 minutes", mistakes: "Discussing advantages only, ignoring disadvantages." },
     { name: "Task 2 Problem / Solution", strategy: "Name the problem with causes, then practical solutions linked to those causes.", time: "40 minutes", mistakes: "Listing solutions with no cause-and-effect link." },
     { name: "Task 2 Double Question", strategy: "Answer BOTH questions in separate body paragraphs, keeping equal weight between them.", time: "40 minutes", mistakes: "Answering only the first question fully." },
+    { name: "Task 2 Mixed / Combined Question", strategy: "Map every clause of the prompt to a paragraph: views, your opinion and solutions all need coverage.", time: "40 minutes", mistakes: "Skipping the part of the question that feels harder to answer." },
   ],
   timeManagement: [
     "Task 1: 5 minutes plan, 12 minutes write, 3 minutes check (overview present, no missing data).",
@@ -1437,6 +1539,188 @@ const localWritingBlueprint: ReadingBlueprint = {
     "Read high-band sample essays and mark the structure: thesis, topic sentences, linking.",
   ],
   grammarVocab: "Use present perfect for recent trends, past simple for finished periods, and comparatives for data. Replace 'big'/'good' with precise academic vocabulary.",
+  typeGuides: [
+    {
+      name: "Task 1 Charts & Graphs",
+      group: "Writing tasks",
+      relevance: "The most common Task 1 type — a line or bar chart appears in most test series. Learn this one first.",
+      official: "Official task: \"The chart below shows… Summarise the information by selecting and reporting the main features, and make comparisons where relevant.\" No opinion allowed.",
+      length: "At least 150 words in 20 minutes · under 150 words risks Task Achievement",
+      steps: [
+        { label: "Overview", text: "One sentence naming the overall trend — \"Overall, sales rose steadily, with a sharp dip in 2020.\"" },
+        { label: "Group", text: "Two body paragraphs by idea or time — \"Electric cars tripled, while petrol models fell by half.\"" },
+        { label: "Compare", text: "Put figures against each other — \"By 2025, digital sales were double in-store sales.\"" },
+      ],
+      band8: "Every key feature covered once, with one clear overview sentence and no invented figures.",
+      tip: "Minute-plan: 20 minutes — 2 planning (write the overview sentence first), 15 writing, 3 checking (word count and units).",
+      avoid: "Listing every number, wandering commentary, and personal opinion.",
+    },
+    {
+      name: "Task 1 Tables",
+      group: "Writing tasks",
+      relevance: "Common — nearly every test series includes a table at some point. Prepare the row-and-column grouping.",
+      official: "Official task: \"The table below shows… Summarise the information by selecting and reporting the main features, and make comparisons where relevant.\"",
+      length: "At least 150 words in 20 minutes · group rows, never list every cell",
+      steps: [
+        { label: "Overview", text: "Name the biggest and smallest values first — \"Overall, the lowest figures were in 2015, across every region.\"" },
+        { label: "Group", text: "Two body paragraphs by rows — \"Urban areas grew fastest, while rural figures stayed flat.\"" },
+        { label: "Cross-compare", text: "Compare across rows and columns — \"The north doubled the south's total.\"" },
+      ],
+      band8: "Two or three body paragraphs that group the data instead of itemising it.",
+      tip: "Minute-plan: 20 minutes — 2 planning, 15 writing, 3 checking (every row mentioned once).",
+      avoid: "A cell-by-cell list and comments about whether the data is good or bad.",
+    },
+    {
+      name: "Task 1 Maps / Plans",
+      group: "Writing tasks",
+      relevance: "A fixture of recent test series — appears in roughly one test in three. Must-prepare.",
+      official: "Official task: \"The maps below show a town centre in 2000 and today. Summarise the information by selecting and reporting the main features, and make comparisons where relevant.\"",
+      length: "At least 150 words in 20 minutes · both time periods must appear",
+      steps: [
+        { label: "Orient", text: "Name the place and both periods — \"The maps show the town centre in 2000 and today.\"" },
+        { label: "Change", text: "One paragraph per map, biggest changes first — \"The car park became a pedestrian square.\"" },
+        { label: "Locate", text: "Place the changes precisely — \"a new hotel went up to the north of the station.\"" },
+      ],
+      band8: "Position words (north of, opposite, adjacent to) used naturally, every change named once.",
+      tip: "Minute-plan: 20 minutes — 2 planning (list 4-5 changes per map), 15 writing, 3 checking (both maps covered).",
+      avoid: "Describing the maps' appearance instead of what changed between the periods.",
+    },
+    {
+      name: "Task 1 Process",
+      group: "Writing tasks",
+      relevance: "Less frequent than charts, but appears regularly in some test series. Learn the passive flow.",
+      official: "Official task: \"The diagram below shows the process for… Summarise the information by selecting and reporting the main features.\"",
+      length: "At least 150 words in 20 minutes · one to two sentences per stage",
+      steps: [
+        { label: "Name", text: "Say what the process produces — \"The diagram shows how glass is recycled.\"" },
+        { label: "Passive", text: "Describe stages in order with the passive — \"The glass is crushed and then melted at 1,400°C.\"" },
+        { label: "Link", text: "Connect stages naturally — \"After sorting, the bottles are washed before crushing.\"" },
+      ],
+      band8: "A clear stage count and sequencing words (first, next, once, finally) with no steps missed.",
+      tip: "Minute-plan: 20 minutes — 2 planning (number the stages), 15 writing, 3 checking (stage order exact).",
+      avoid: "Commentary, opinions, and skipping any stage of the cycle.",
+    },
+    {
+      name: "Task 1 Mixed Charts",
+      group: "Writing tasks",
+      relevance: "Occasional — two visuals in one question. Appears in some series; balance both visuals evenly.",
+      official: "Official task: \"The charts below show… Summarise the information by selecting and reporting the main features, and make comparisons where relevant.\"",
+      length: "At least 150 words in 20 minutes · both visuals in equal depth",
+      steps: [
+        { label: "Each visual", text: "One body paragraph per visual — \"The bar chart shows… Meanwhile, the table records…\"" },
+        { label: "One overview", text: "A single sentence covering both — \"Both visuals point to a steady shift towards streaming.\"" },
+        { label: "Span", text: "Connect the two sets of data — \"The rise in the chart matches the table's higher totals.\"" },
+      ],
+      band8: "Equal paragraph weight across both visuals and one overview that touches both.",
+      tip: "Minute-plan: 20 minutes — 2 planning, 15 writing (half the time per visual), 3 checking.",
+      avoid: "Describing one visual in detail and dismissing the other in one line.",
+    },
+    {
+      name: "Task 1 Diagrams",
+      group: "Writing tasks",
+      relevance: "The least common Task 1 — appears rarely. Cover it last, and only if the other types are solid.",
+      official: "Official task: \"The diagram below shows how… Summarise the information by selecting and reporting the main features.\"",
+      length: "At least 150 words in 20 minutes · parts ordered by location, not time",
+      steps: [
+        { label: "Parts", text: "Name the components in the diagram's order — \"The filter is fixed at the top of the tank.\"" },
+        { label: "Location", text: "Describe position to position — \"pipes run from the inlet along the left wall.\"" },
+        { label: "Function", text: "One sentence on how it works — \"water enters here and passes through the filter.\"" },
+      ],
+      band8: "Every labelled part identified once, with the working explained cleanly in order.",
+      tip: "Minute-plan: 20 minutes — 2 planning, 15 writing, 3 checking (every label covered).",
+      avoid: "Narrating a time sequence the diagram does not show.",
+    },
+    {
+      name: "Task 2 Opinion",
+      group: "Writing tasks",
+      relevance: "The single most common Task 2 — around a quarter of all essays in most series. Learn this one first.",
+      official: "Official task: \"To what extent do you agree or disagree? / Do you agree or disagree? Give reasons for your answer and include any relevant examples from your own knowledge or experience.\"",
+      length: "At least 250 words in 40 minutes · one reason and one example per body paragraph",
+      steps: [
+        { label: "Position", text: "State it in the introduction — \"In my view, remote work should remain an option.\"" },
+        { label: "Body", text: "Two paragraphs, each with a reason and an example — \"Flexible hours raise output — my team delivers more from home.\"" },
+        { label: "Conclusion", text: "Restate in different words — \"For most roles, a hybrid model is the realistic future.\"" },
+      ],
+      band8: "A clear position throughout — never a hidden or shifting opinion.",
+      tip: "Minute-plan: 40 minutes — 3 planning (position + two ideas), 32 writing, 5 checking (position visible in every paragraph, 250+ words).",
+      avoid: "Repetition and memorised templates; every sentence must move the argument.",
+    },
+    {
+      name: "Task 2 Discussion",
+      group: "Writing tasks",
+      relevance: "Very common — appears alongside Opinion in most series. Discuss both views fairly.",
+      official: "Official task: \"Discuss both views and give your own opinion. Give reasons for your answer and include any relevant examples.\"",
+      length: "At least 250 words in 40 minutes · roughly 80 words per view + your opinion",
+      steps: [
+        { label: "Both sides", text: "One paragraph per view, fairly — \"Supporters argue that… Critics counter that…\"" },
+        { label: "Your view", text: "Give your own position with a reason — \"On balance, I side with… because…\"" },
+        { label: "Conclusion", text: "Settle it in one sentence — \"A blend of both approaches would serve most countries best.\"" },
+      ],
+      band8: "Both views developed with examples, and a personal opinion that is clearly expressed.",
+      tip: "Minute-plan: 40 minutes — 3 planning (echoes both views), 32 writing, 5 checking (both sides present).",
+      avoid: "Straw-manning one view or disappearing behind 'some people say'.",
+    },
+    {
+      name: "Task 2 Advantages / Disadvantages",
+      group: "Writing tasks",
+      relevance: "Common — one of the most repeated themes across test series.",
+      official: "Official task: \"What are the advantages and disadvantages of…? Give reasons for your answer and include any relevant examples.\"",
+      length: "At least 250 words in 40 minutes · cover both sides, then a verdict",
+      steps: [
+        { label: "One side", text: "Advantages with an example — \"On the one hand, remote work cuts commuting time." },
+        { label: "Other side", text: "Disadvantages with an example — \"On the other hand, it weakens team culture.\"" },
+        { label: "Verdict", text: "A reasoned conclusion — \"The benefits outweigh the drawbacks when companies invest in team building.\"" },
+      ],
+      band8: "Balanced development of both sides and a clear reasoned judgement in the conclusion.",
+      tip: "Minute-plan: 40 minutes — 3 planning (2 advantages + 2 disadvantages), 32 writing, 5 checking.",
+      avoid: "One long side and a token flipped paragraph; keep parity.",
+    },
+    {
+      name: "Task 2 Problem / Solution",
+      group: "Writing tasks",
+      relevance: "Regular — appears in nearly every test series in some form.",
+      official: "Official task: \"What problems does… cause, and what solutions can you suggest? Give reasons for your answer and include any relevant examples.\"",
+      length: "At least 250 words in 40 minutes · at least one problem and one solution, fully linked",
+      steps: [
+        { label: "Problem", text: "One paragraph naming the problem and its cause — \"Urban traffic congestion worsens as cities grow.\"" },
+        { label: "Solution", text: "One paragraph with a realistic fix — \"Congestion charging, as seen in several capitals, cuts car use.\"" },
+        { label: "Result", text: "Show what the solution achieves — \"Within a decade, commuting times could fall by a third.\"" },
+      ],
+      band8: "Every problem matched by a workable solution, each supported with a concrete example.",
+      tip: "Minute-plan: 40 minutes — 3 planning (1-2 problems, 1-2 solutions), 32 writing, 5 checking.",
+      avoid: "Listing problems without ever solving them, or vague fixes like 'the government should act'.",
+    },
+    {
+      name: "Task 2 Double Question",
+      group: "Writing tasks",
+      relevance: "Occasional — two linked questions in one prompt. Some series feature it; answer BOTH fully.",
+      official: "Official task: \"Why is… becoming more common? Do you think it is a positive or negative development? Give reasons for your answer.\"",
+      length: "At least 250 words in 40 minutes · one paragraph per question",
+      steps: [
+        { label: "First question", text: "Answer it directly — \"It is becoming common because travel and remote tools got cheaper.\"" },
+        { label: "Second question", text: "Answer it directly — \"Overall I see it as positive, since it widens access to jobs.\"" },
+        { label: "Link", text: "Tie both answers in the conclusion — \"As the causes persist, its advantages are likely to grow.\"" },
+      ],
+      band8: "Both halves of the prompt answered fully — missing one question caps the band.",
+      tip: "Minute-plan: 40 minutes — 3 planning (one idea per question), 32 writing, 5 checking (both answered).",
+      avoid: "Answering only the first half or answering the second one vaguely.",
+    },
+    {
+      name: "Task 2 Mixed / Combined Question",
+      group: "Writing tasks",
+      relevance: "The least common Task 2 — a combined prompt. Appears in a few series; map each clause to a paragraph.",
+      official: "Official task: \"Some people think… while others think… Discuss both views, give your opinion, and say what the implications would be.\"",
+      length: "At least 250 words in 40 minutes · every clause of the prompt gets a paragraph",
+      steps: [
+        { label: "Split", text: "Map each clause of the prompt — \"this question asks for both views, my opinion, and the consequences.\"" },
+        { label: "Cover", text: "One requirement per paragraph — \"First the two views, then my position, then the outcomes.\"" },
+        { label: "Close", text: "Tie everything together — \"Either way, the effect on planning is what we must weigh.\"" },
+      ],
+      band8: "Every requirement of the combined prompt handled — skipping one caps the band.",
+      tip: "Minute-plan: 40 minutes — 3 planning (requirements inventory first), 32 writing, 5 checking against the prompt.",
+      avoid: "Treating it as a single question and missing half the task.",
+    },
+  ],
 };
 
 export function getWritingBlueprint(): ReadingBlueprint {
@@ -1452,16 +1736,15 @@ const localSpeakingBlueprint: ReadingBlueprint = {
     { name: "Part 3", detail: "Discussion. Abstract questions linked to the Part 2 topic. Deeper opinions with reasons and examples. 4-5 minutes.", topic: "Abstract / critical" },
   ],
   scoring: [
-    { correct: "Fluency", band: "20%" },
-    { correct: "Pronunciation", band: "20%" },
-    { correct: "Grammar (Range and Accuracy)", band: "20%" },
-    { correct: "Vocabulary (Lexical Resource)", band: "20%" },
-    { correct: "Coherence", band: "20%" },
+    { correct: "Fluency & Coherence", band: "25%" },
+    { correct: "Lexical Resource", band: "25%" },
+    { correct: "Grammatical Range & Accuracy", band: "25%" },
+    { correct: "Pronunciation", band: "25%" },
   ],
   questionTypes: [
-    { name: "Part 1 Interview (personal questions)", strategy: "Answer directly, add a reason or example, then stop. Never one word.", time: "~20 sec each", mistakes: "Memorised answers that do not fit the question." },
-    { name: "Part 2 Cue Card (long turn)", strategy: "Use the 1 minute to write 4 keywords and tell the story with structure (what/when/where/why).", time: "1-2 minutes", mistakes: "Speaking for 30 seconds and stopping. Keep talking with details." },
-    { name: "Part 3 Discussion (abstract questions)", strategy: "Give an opinion, explain it, and give an example or compare.", time: "~60 sec each", mistakes: "Giving one-sentence answers to abstract questions." },
+    { name: "Part 1 — Introduction & Interview (personal questions)", strategy: "Answer directly, add a reason or example, then stop. Never one word.", time: "~20 sec each", mistakes: "Memorised answers that do not fit the question." },
+    { name: "Part 2 — Cue Card / Individual Long Turn", strategy: "Use the 1 minute to write 4 keywords and tell the story with structure (what/when/where/why).", time: "1-2 minutes", mistakes: "Speaking for 30 seconds and stopping. Keep talking with details." },
+    { name: "Part 3 — Discussion (abstract questions)", strategy: "Give an opinion, explain it, and give an example or compare.", time: "~60 sec each", mistakes: "Giving one-sentence answers to abstract questions." },
   ],
   timeManagement: [
     "Part 1: do not over-answer; 2-3 sentences is enough.",
@@ -1489,6 +1772,310 @@ const localSpeakingBlueprint: ReadingBlueprint = {
     "Practise reframing: answer with a twist ('attention has not disappeared; it has become selective').",
   ],
   grammarVocab: "Use present/past/future correctly, conditionals, and question tags. Pronunciation: stress content words and keep a steady rhythm — fillers like 'umm' do not lower your score.",
+typeGuides: [
+    {
+      group: "Part 1",
+      name: "Personal Information",
+      official: "Official drill: the examiner names a topic — \"Let's talk about your home\" — then asks one question at a time, e.g. \"What kind of place is it?\" and \"Would you say it's a good place to live? (Why?)\". Give one short, clear answer per question (2-3 sentences), then stop.",
+      length: "25-30 s · 2-3 sentences: the fact, one detail, stop",
+      steps: [
+        { label: "Answer", text: "State the fact in one clean line, like small talk: \"I'm from a small town in the south.\"" },
+        { label: "One light detail", text: "Add a single colour, not a biography: \"It has a river running through it.\"" },
+        { label: "Stop", text: "Close softly or just let it rest: \"So, yeah, quiet place, but home.\"" },
+      ],
+      band8: "Zoom out naturally: \"It shaped me more than I notice day to day.\"",
+      avoid: "A memorised CV: birth year, family members, address — that sounds rehearsed.",
+    },
+    {
+      group: "Part 1",
+      name: "Preferences",
+      official: "Official drill: \"Would you prefer...?\" or \"What sort of... would you most like?\" (real sample: \"What sort of accommodation would you most like to live in?\"). Pick one side, give the real reason, one honest contrast, stop.",
+      length: "30 s · 3-4 sentences: choose + why + one contrast",
+      steps: [
+        { label: "Choose", text: "Pick one side straight away: \"If I had to choose, I'd go the apartment.\"" },
+        { label: "Why", text: "Give the real reason, not a slogan: \"A flat is easier to keep, and I'm barely home anyway.\"" },
+        { label: "Concede", text: "One honest contrast, then stop: \"Though I see the appeal of extras.\"" },
+      ],
+      band8: "Elevate it into a value: \"It seems I choose ease over size — in homes and in life.\"",
+      avoid: "Fence-sitting: \"I like both equally\" on every question sounds trained to ignore the question.",
+    },
+    {
+      group: "Part 1",
+      name: "Likes / Dislikes",
+      official: "Official drill: direct feeling questions like \"What do you like about living there?\". Name the thing, say what it does for you, one small story line, finish.",
+      length: "30 s · 3 sentences: name + feeling + one small line",
+      steps: [
+        { label: "Name it", text: "\"I'm actually quite into cooking, in a lazy kind of way.\"" },
+        { label: "Feel it", text: "\"It calms me after work — chopping vegetables is close to meditation.\"" },
+        { label: "Small story", text: "\"Weekends, I make the same rice my grandfather taught me.\"" },
+        { label: "Stop", text: "End with the point, not a list: \"It's less the dish, more the routine.\"" },
+      ],
+      band8: "Add the tension: \"I like it more as an escape than as a skill — there is a difference.\"",
+      avoid: "Grocery lists: \"I like coffee, tea, pizza, books and films\" — no thread, no score.",
+    },
+    {
+      group: "Part 1",
+      name: "Habits / Routines",
+      official: "Official drill: \"How often do you...?\" or \"When you do X, what do you do?\" Give the habit, the rhythm and the reason behind it - no timeline recital.",
+      length: "30 s · 3-4 sentences: habit + rhythm + why",
+      steps: [
+        { label: "Habit + rhythm", text: "\"I've got into the habit of reading before I sleep.\"" },
+        { label: "Why", text: "\"It helps me switch off — my phone just wakes the day back up.\"" },
+        { label: "Change", text: "\"It started during lockdowns and just never left.\"" },
+      ],
+      band8: "Admit imperfection: \"I still break it on deadline weeks, and that's human.\"",
+      avoid: "Clock answers: \"I wake at 6, I eat at 7\" with zero feeling — examiners hear robot routines.",
+    },
+    {
+      group: "Part 1",
+      name: "Past Experiences",
+      official: "Official drill: \"When did you first...?\" or \"How long have you...?\" One short memory, one precise detail, one consequence - stay in the memory frame.",
+      length: "30-40 s · 3-4 sentences: memory + detail + consequence",
+      steps: [
+        { label: "Recall", text: "\"When I was fourteen, I sold lemonade for a whole summer.\"" },
+        { label: "Detail", text: "\"I did it to buy trainers my parents refused to pay for.\"" },
+        { label: "Outcome", text: "\"I made enough by August — and I've been careful with money ever since.\"" },
+      ],
+      band8: "Reflect, don't report: \"The money mattered less than learning to organise myself.\"",
+      avoid: "Binary 'interesting' and switching to present tense — stay in the memory frame.",
+    },
+    {
+      group: "Part 1",
+      name: "Reasons / Explanations",
+      official: "Official drill: questions are marked \"(Why?)\" - e.g. \"Would you say it's a good place to live? (Why?)\". An honest reason, then the proof of it.",
+      length: "30 s · 3 sentences: honest reason + the proof",
+      steps: [
+        { label: "Cause #1", text: "\"If you ask why I study English, the honest answer is work.\"" },
+        { label: "Cause #2", text: "\"On top of that, I prefer watching films in the original.\"" },
+        { label: "Small proof", text: "\"Last week a client asked me to review her English proposal — that's the everyday proof.\"" },
+      ],
+      band8: "Add the hidden layer: \"Beneath that, I suspect I'm proving something to myself.\"",
+      avoid: "\"Because it's interesting\" with nothing behind it — dead language.",
+    },
+    {
+      group: "Part 1",
+      name: "Opinions about Familiar Topics",
+      official: "Official drill: \"Would you say...?\" or \"What do you think of...?\" on an everyday topic - position, one reason, one concession.",
+      length: "30 s · 3-4 sentences: position + why + concession",
+      steps: [
+        { label: "Position", text: "\"Honestly, I think breakfast is overrated.\"" },
+        { label: "Why", text: "\"One meal shouldn't decide the whole morning for you.\"" },
+        { label: "Flip / context", text: "\"But I know people who fall apart without it — routines are picky.\"" },
+      ],
+      band8: "Tie it to a principle: \"To me, food should serve life, not run it.\"",
+      avoid: "Starting every sentence with 'I think I think' — trim the crutch.",
+    },
+    {
+      group: "Part 2",
+      name: "Person",
+      official: "Official cue card: \"Describe a person...\" - You should say: who the person is / how you know them / what kind of person they are / and explain why you like them (the explain-point is what scores).",
+      length: "full 2 min · 12-15 sentences (3-4 per point); give the 'why' point 4-5",
+      steps: [
+        { label: "Who", text: "Open with the person + why they came to mind: \"My grandmother — she runs the whole family.\"" },
+        { label: "Qualities", text: "\"The first thing about her is that she never says no.\"" },
+        { label: "Moment", text: "Your one real story tied to the card: once her neighbour's pipe burst at 2am and she was there with a mop." },
+        { label: "Why", text: "\"She taught me that care is a skill, not a mood.\"" },
+      ],
+      band8: "Balance the portrait: \"She never says she's strong — she just keeps ironing.\"",
+      tip: "In the real test: 60 seconds of notes, 1–2 minutes of talking, then one or two short rounding-off questions on the same person.",
+      avoid: "A polished 'my mother' speech that ignores the actual card.",
+    },
+    {
+      group: "Part 2",
+      name: "Place",
+      official: "Official cue card: \"Describe a place...\" - You should say: where it is / when and why you go / what you see and do there / and explain why you like it.",
+      length: "full 2 min · 12-15 sentences (3-4 per point); senses carry the last point",
+      steps: [
+        { label: "What / where", text: "\"A hillside cafe that looks over the whole city.\"" },
+        { label: "Senses", text: "\"There's a strong, soft wind — you hear it more than you feel it.\"" },
+        { label: "First visit", text: "\"A friend dragged me there after my exams; I've been going ever since.\"" },
+        { label: "What you do", text: "\"Sit with a notebook, watch the lights come on, drift.\"" },
+      ],
+      band8: "Turn it into a habit of mind: \"Height makes problems small — that's what it does.\"",
+      tip: "Exam format: 1 minute to jot the card's points, speak 1–2 minutes, then a rounding-off question — \"Would you actually live there?\"",
+      avoid: "'It's big and modern' and then 30 seconds of silence.",
+    },
+    {
+      group: "Part 2",
+      name: "Object / Thing",
+      official: "Official cue card (British Council's own sample): \"Describe something you own which is very important to you\" - You should say: where you got it from / how long you have had it / what you use it for / and explain why it is important to you.",
+      length: "full 2 min · 12-15 sentences; 3-4 per point, more on origin + why",
+      steps: [
+        { label: "What", text: "\"A small leather wallet, worn thin at the corners.\"" },
+        { label: "Origin", text: "\"My brother gave it to me before he moved abroad.\"" },
+        { label: "Use", text: "\"It's still practical — cards in, receipts out, photo of my parents inside.\"" },
+        { label: "Why", text: "\"It's a pocket-sized time capsule.\"" },
+      ],
+      band8: "One physical oddity: \"It smells faintly of the old house — strange for a wallet.\"",
+      tip: "Use the 1-minute note time to map the card's points, then talk 1–2 minutes and answer the rounding-off question. Don't just list features — tell where it came from and why it stays.",
+      avoid: "Only features, no story: 'It's brown and it has a zip.'",
+    },
+    {
+      group: "Part 2",
+      name: "Experience / Event",
+      official: "Official cue card: \"Describe an event...\" - You should say: when it happened / what happened / who was with you / and explain why it was memorable. A rounding-off question follows your talk.",
+      length: "full 2 min · 12-15 sentences; the feeling must come back in the 'why'",
+      steps: [
+        { label: "Scene", text: "\"A night train, the first time I travelled alone.\"" },
+        { label: "Happen", text: "\"Fields and small stations kept sliding past from 2am to dawn.\"" },
+        { label: "Moment", text: "\"At 3am, watching the moon, I decided to stop worrying about life.\"" },
+        { label: "Takeaway", text: "\"It proved I could rely on myself.\"" },
+      ],
+      band8: "Make it yours: \"I didn't understand the world better that night — I understood myself.\"",
+      tip: "The examiner rounds off after your talk — \"Were you scared then?\" — answer in two sentences, not another story.",
+      avoid: "Retelling it like a news report — feeling belongs in the middle.",
+    },
+    {
+      group: "Part 2",
+      name: "Activity",
+      official: "Official cue card: \"Describe an activity...\" - You should say: what it is / when and where you do it / who you do it with / and explain why you keep doing it.",
+      length: "full 2 min · 12-15 sentences: what, when, where, with whom, why",
+      steps: [
+        { label: "What", text: "\"Swimming — and only on cold mornings.\"" },
+        { label: "When / with", text: "\"Forty minutes alone in the lane before work.\"" },
+        { label: "Detail", text: "\"The water is cold for five minutes, then the protest stops.\"" },
+        { label: "Why", text: "\"It forces me to breathe slowly — a thing I forget at a desk.\"" },
+      ],
+      band8: "Round it off: \"After it, even heavy days feel a notch lighter.\"",
+      tip: "Use the 1-minute note time to jot the card's points, then keep the 1–2-minute talk going with small routines — precise place, time and feeling.",
+      avoid: "One sentence and silence: 'I like running' — the card asks for a story.",
+    },
+    {
+      group: "Part 2",
+      name: "Future Plan",
+      official: "Official cue card: \"Describe a plan...\" - You should say: what the plan is / when you made it / the first steps you have taken / and explain why it matters to you.",
+      length: "full 2 min · 12-15 sentences: plan + steps + why it matters",
+      steps: [
+        { label: "What", text: "\"I want to open a small cooking workshop.\"" },
+        { label: "Why now", text: "\"I've been teaching friends for two years and the kitchen is where I feel real.\"" },
+        { label: "First steps", text: "\"I've already researched rent and picked the street.\"" },
+        { label: "Feeling", text: "\"If it lands, Thursday nights next to a hot stove is where you'll find me.\"" },
+      ],
+      band8: "Keep the honesty: \"If the timing cracks, I'll start as a weekend class — same heart.\"",
+      tip: "Expect a rounding-off question — \"What if the plan fails?\" — answer it in two sentences, with the same honesty.",
+      avoid: "Dreamy 'one day I will' with no steps — plans need carriers.",
+    },
+    {
+      group: "Part 3",
+      name: "Opinion",
+      official: "Official drill (from the published transcript): \"What do you think of this way of thinking?\" → \"And do you think this will change?\" → \"Can you tell me a little bit more about that?\" Each turn: position + one new example.",
+      length: "45-60 s · 4-6 sentences: position + 2 supports + example",
+      steps: [
+        { label: "Claim", text: "\"In my opinion, a degree isn't the only key anymore.\"" },
+        { label: "Defend", text: "\"The job market now rewards what you can do, not where you studied.\"" },
+        { label: "Example", text: "\"A friend from a coding camp earns more than his degree-holding colleagues.\"" },
+        { label: "Nuance", text: "\"Though for medicine, the certificate still gates entry.\"" },
+      ],
+      band8: "Wrap it: \"The degree lost its monopoly, not its value.\"",
+      tip: "It's a two-way discussion — the examiner may say \"Can you tell me a little bit more about that?\" Have a second example ready.",
+      avoid: "\"It depends\" — take a spine, then add nuance.",
+    },
+    {
+      group: "Part 3",
+      name: "Comparison",
+      official: "Official drill (from the published questions): \"What kind of things give status to people?\" → \"Have things changed since your parents' time?\" Compare past vs now - both poles, then your own judgement.",
+      length: "45-75 s · 5-7 sentences: past + now + reason + verdict",
+      steps: [
+        { label: "Poles", text: "\"Compare free time now to my parents' era.\"" },
+        { label: "Contrast", text: "Then, leisure meant gathering; now it means a phone and a door." },
+        { label: "Why", text: "\"Everything is streaming and homes have lost common living rooms.\"" },
+        { label: "Judge", text: "\"I'd pick solo calm, but I'd fight for my Saturdays.\"" },
+      ],
+      band8: "\"In 1985 leisure was a group photo; now it's a single story.\"",
+      tip: "Three crisp contrasts beat one long one — use before/after, here/there, young/old.",
+      avoid: "Describing one side and forgetting the other — comparisons need both poles.",
+    },
+    {
+      group: "Part 3",
+      name: "Reasons / Causes",
+      official: "Official drill: plain \"Why...?\" / \"Why do you think that is?\" - deliver the visible reason, the deeper reason, then one ripple.",
+      length: "45-60 s · 4-6 sentences: visible + deeper + evidence + ripple",
+      steps: [
+        { label: "Visible cause", text: "\"The obvious reason is money — everything rides on it.\"" },
+        { label: "Deeper cause", text: "\"Beneath it, status: nobody wants to look irresponsible.\"" },
+        { label: "Evidence", text: "\"My cousin married later than he wanted — no flat, no wedding.\"" },
+        { label: "Ripple", text: "\"And that pressure lands hardest on women.\"" },
+      ],
+      band8: "\"The real fuel isn't money — it's what money buys: respect.\"",
+      tip: "One visible + one hidden cause, then a ripple. Examiner-approved layers.",
+      avoid: "Answering with a single 'because' — one cause reads as shallow.",
+    },
+    {
+      group: "Part 3",
+      name: "Advantages / Disadvantages",
+      official: "Official drill: \"What are the advantages and disadvantages of...?\" - one developed advantage, one developed disadvantage, then your verdict.",
+      length: "45-60 s · 5-6 sentences: pro + con + verdict",
+      steps: [
+        { label: "Upside", text: "\"Working from home gives me back two hours a day.\"" },
+        { label: "Downside", text: "\"It can isolate — after a week alone I start talking to plants.\"" },
+        { label: "Weigh", text: "\"For the social it's a cost; for the tired it's medicine.\"" },
+        { label: "Verdict", text: "\"I'd still choose it, and I'd treat isolation like a tax to pay.\"" },
+      ],
+      band8: "\"It costs your network but buys your attention — attention wins.\"",
+      tip: "One developed pro and one con beat ten bullets of each.",
+      avoid: "Perfectly balanced 'both have points' — land one clear side.",
+    },
+    {
+      group: "Part 3",
+      name: "Hypothetical",
+      official: "Official drill: \"What would you do if...?\" / \"If you had the chance...\" - answer in conditionals and stay inside the imagined world until asked back to reality.",
+      length: "45-60 s · 4-6 sentences: conditional + picture + personal",
+      steps: [
+        { label: "If...", text: "\"If I had the power to remove exams, I'd use it.\"" },
+        { label: "Thing", text: "\"Because they test memory under stress, not understanding.\"" },
+        { label: "Picture", text: "\"Two students — one slept badly, one truly knows. Only one passes. Which did we want to keep?\"" },
+        { label: "Personal", text: "\"I'd start in my own old school, where failures still sit on the walls.\"" },
+      ],
+      band8: "Make it personal — conditionals in motion: \"I'd probably begin with the subject I loved, and see what it could be.\"",
+      tip: "The examiner may extend the imaginary world — follow the \"what if\" deeper instead of retreating to reality.",
+      avoid: "Answering as if the imagined world already exists — float in the conditional.",
+    },
+    {
+      group: "Part 3",
+      name: "Prediction / Future",
+      official: "Official drill (from the published transcript): \"And do you think this will change? In the future...\" - direction, why, a sign you can see now, then what follows.",
+      length: "45-60 s · 4-6 sentences: forecast + why + sign + consequence",
+      steps: [
+        { label: "Direction", text: "\"I think AI won't replace us — it will change the work division.\"" },
+        { label: "Why", text: "\"Machines cover the ifs; judgment calls stay human.\"" },
+        { label: "Sign", text: "\"In hospitals it's already split — the scan reads, the human speaks.\"" },
+        { label: "Consequence", text: "\"In ten years the split will look wildly different per profession.\"" },
+      ],
+      band8: "Soft certainty pays: \"It won't be a slow crawl either — some jobs will crack overnight.\"",
+      tip: "Predict + proof (a sign you can see) + chain.",
+      avoid: "Fortune-teller certainty: 'It 100% will not change' — soften the claim.",
+    },
+    {
+      group: "Part 3",
+      name: "Effects / Consequences",
+      official: "Official drill: \"How does it affect people?\" / \"What are the consequences?\" - immediate effect, long-term effect, the chain, then who feels it.",
+      length: "45-60 s · 4-6 sentences: immediate + slow + chain + who",
+      steps: [
+        { label: "Immediate", text: "\"Right now, notifications fracture attention every few minutes.\"" },
+        { label: "Slow", text: "\"The long-term bill is background tiredness.\"" },
+        { label: "Chain", text: "Tired focus, shallow reading, slower learning — at every age." },
+        { label: "Who", text: "\"Students feel it first; families feel it last.\"" },
+      ],
+      band8: "\"It's not a noise problem, it's an attention inheritance problem\" — the chain is the band-8.",
+      tip: "Short-term to long-term to who feels it. Let the chain breathe.",
+      avoid: "Only saying 'bad' without saying why, for whom, or how deep.",
+    },
+    {
+      group: "Part 3",
+      name: "Problem / Solution",
+      official: "Official drill: \"What can be done about this?\" / \"How should we deal with...?\" - the root, why it stays, one small fix, and who acts.",
+      length: "45-60 s · 4-6 sentences: root + why + small fix + who",
+      steps: [
+        { label: "Root", text: "\"The real problem isn't plastic — it's convenience.\"" },
+        { label: "Why it persists", text: "\"Nobody chooses to pollute; they pick the lazy wrap.\"" },
+        { label: "Fix", text: "\"Bag fees did more than a year of ads. That's the shape of a fix.\"" },
+        { label: "Who acts", text: "\"The real change comes from shops, not speeches.\"" },
+      ],
+      band8: "Principle-first: \"Make the good choice the lazy one — that's the policy.\"",
+      tip: "Root, why it stays, one small working fix. That out-says vague essay answers.",
+      avoid: "'The government should fix it' with zero detail — say who, and how.",
+    },
+  ],
 };
 
 export function getSpeakingBlueprint(): ReadingBlueprint {
@@ -1548,10 +2135,12 @@ function localReadingItemsByType(type: string): PracticeItem[] {
     .flatMap((session) => session.items)
     .filter((item) => {
       if (item.type === "matching") {
-        return ["Matching Headings", "Matching Features", "Matching Sentence Endings"].includes(type);
+        return ["Matching Information", "Matching Headings", "Matching Features", "Matching Sentence Endings"].includes(type);
       }
       if (item.type === "multiple-choice") return type === "Multiple Choice";
-      if (item.type === "short-answer") return type === "Short Answer";
+      if (item.type === "short-answer") {
+        return ["Short Answer", "Sentence Completion", "Summary Completion", "Note Completion", "Table Completion", "Flow-chart Completion", "Diagram Label Completion"].includes(type);
+      }
       return false;
     });
 }
@@ -1563,7 +2152,7 @@ function localListeningItemsByType(type: string): PracticeItem[] {
       if (item.type === "matching") return type === "Matching";
       if (item.type === "multiple-choice") return type === "Multiple Choice";
       if (item.type === "short-answer") {
-        return ["Form / Note Completion", "Sentence Completion", "Map Labelling"].includes(type);
+        return ["Form Completion", "Note Completion", "Sentence Completion", "Table Completion", "Flow-chart Completion", "Summary Completion", "Short Answer", "Map / Plan / Diagram Labelling"].includes(type);
       }
       return false;
     });
@@ -1725,7 +2314,7 @@ function detectWeaknesses(session: PracticeSession, answers: Record<string, stri
   }
 
   if (session.module === "listening") {
-    weaknesses.add(session.questionTypes.includes("Map Labelling") ? "Map Labelling" : "Distractor control");
+    weaknesses.add(session.questionTypes.includes("Map / Plan / Diagram Labelling") ? "Map / Plan / Diagram Labelling" : "Distractor control");
     if (words < 12) weaknesses.add("Detail capture");
   }
 
@@ -1913,7 +2502,7 @@ export function evaluateMockExam(
   const speedScores: number[] = [];
   const tmScores: number[] = [];
   (["listening", "reading", "writing", "speaking"] as Skill[]).forEach((skill) => {
-    const installed = skill === "speaking" ? 12 : skill === "writing" ? 2 : 40;
+    const installed = skill === "speaking" ? 20 : skill === "writing" ? 2 : 40;
     const metrics = computeTimingMetrics(skill, installed, answers, OFFICIAL_SECTION_MINUTES[skill], timing?.[skill]);
     sectionTiming[skill] = metrics.timing;
     speedScores.push(metrics.speed.score);

@@ -20,7 +20,7 @@ const spaceMono = Space_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AI IELTS Examiner",
+  title: "Mkg.IELTS.COM",
   description: "Adaptive IELTS examiner and personal tutor powered by an AI Brain.",
 };
 

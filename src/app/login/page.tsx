@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import AuthShell from "@/components/auth-shell";
 import GoogleSignIn from "@/components/google-sign-in";
-import { authApi, setAuth, clearAuth } from "@/lib/backend";
+import { authApi, setAuth, isAuthenticated } from "@/lib/backend";
 
 const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? "";
 
@@ -16,9 +16,11 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
 
-  useEffect(() => {
-    clearAuth();
-  }, []);
+  // Already signed in (e.g. pressing the back arrow after logging in)?
+  // Never wipe the session - send the student straight back to the app.
+  if (isAuthenticated()) {
+    router.replace("/app");
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,7 +33,7 @@ export default function LoginPage() {
     try {
       const auth = await authApi.login(email.trim(), password);
       setAuth(auth.access_token, auth.profile);
-      router.push("/app");
+      router.replace("/app");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed. Please try again.");
     } finally {
@@ -46,7 +48,7 @@ export default function LoginPage() {
       try {
         const auth = await authApi.google(credential, GOOGLE_CLIENT_ID);
         setAuth(auth.access_token, auth.profile);
-        router.push("/app");
+        router.replace("/app");
       } catch (err) {
         setError(err instanceof Error ? err.message : "Google sign-in failed. Please try again.");
       } finally {

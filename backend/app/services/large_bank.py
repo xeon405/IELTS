@@ -39,10 +39,14 @@ def items_for_mode(module: str, mode: str) -> list[Item]:
     """Item pool for a mode: a type label, a part/passage slot, or everything."""
     if module == "writing":
         # Writing modes are type labels already; map Task slots to their labels.
-        task1 = ["Task 1 Report (Data)", "Task 1 Process / Map"]
+        task1 = [
+            "Task 1 Charts & Graphs", "Task 1 Tables", "Task 1 Mixed Charts",
+            "Task 1 Process", "Task 1 Maps / Plans", "Task 1 Diagrams",
+        ]
         task2 = [
             "Task 2 Opinion", "Task 2 Discussion", "Task 2 Advantages / Disadvantages",
             "Task 2 Problem / Solution", "Task 2 Double Question",
+            "Task 2 Mixed / Combined Question",
         ]
         if "Task 1" in mode and "Task 2" not in mode:
             labels = task1

@@ -6,6 +6,7 @@ scores, weaknesses, learning history, achievements). Writing and speaking
 answers get a Gemini band estimate when available, otherwise a transparent
 heuristic based on length, structure and vocabulary range."""
 
+import difflib
 import re
 from datetime import datetime, timezone
 from typing import Any
@@ -19,7 +20,36 @@ from . import knowledge_base as kb
 
 SKILLS = ("reading", "listening", "writing", "speaking")
 
-OBJECTIVE_TYPES = ("multiple-choice", "true-false", "yes-no-not-given", "sentence-completion", "short-answer", "matching", "matching-headings", "matching-sentence-endings", "summary-completion", "form-completion", "map-labelling", "table-completion")
+# Exact sentence plans for the Speaking question types (mirrors the app's
+# Speaking Blueprint). The "corrected" teaching answer must follow these.
+_TYPE_LENGTHS: dict[str, str] = {
+    # Part 1
+    "Personal Information": "25-30 s · 2-3 sentences: the fact, one detail, stop",
+    "Preferences": "30 s · 3-4 sentences: choose + why + one contrast",
+    "Likes / Dislikes": "30 s · 3 sentences: name + feeling + one small line",
+    "Habits / Routines": "30 s · 3-4 sentences: habit + rhythm + why",
+    "Past Experiences": "30-40 s · 3-4 sentences: memory + detail + consequence",
+    "Reasons / Explanations": "30 s · 3 sentences: honest reason + the proof",
+    "Opinions about Familiar Topics": "30 s · 3-4 sentences: position + why + concession",
+    # Part 2
+    "Person": "full 2 min · 12-15 sentences (3-4 per point); give the 'why' point 4-5",
+    "Place": "full 2 min · 12-15 sentences (3-4 per point); senses carry the last point",
+    "Object / Thing": "full 2 min · 12-15 sentences; 3-4 per point, more on origin + why",
+    "Experience / Event": "full 2 min · 12-15 sentences; the feeling must come back in the 'why'",
+    "Activity": "full 2 min · 12-15 sentences: what, when, where, with whom, why",
+    "Future Plan": "full 2 min · 12-15 sentences: plan + steps + why it matters",
+    # Part 3
+    "Opinion": "45-60 s · 4-6 sentences: position + 2 supports + example",
+    "Comparison": "45-75 s · 5-7 sentences: past + now + reason + verdict",
+    "Reasons / Causes": "45-60 s · 4-6 sentences: visible + deeper + evidence + ripple",
+    "Advantages / Disadvantages": "45-60 s · 5-6 sentences: pro + con + verdict",
+    "Hypothetical": "45-60 s · 4-6 sentences: conditional + picture + personal",
+    "Prediction / Future": "45-60 s · 4-6 sentences: forecast + why + sign + consequence",
+    "Effects / Consequences": "45-60 s · 4-6 sentences: immediate + slow + chain + who",
+    "Problem / Solution": "45-60 s · 4-6 sentences: root + why + small fix + who",
+}
+
+OBJECTIVE_TYPES = ("multiple-choice", "true-false", "yes-no-not-given", "sentence-completion", "short-answer", "matching", "matching-information", "matching-headings", "matching-sentence-endings", "summary-completion", "form-completion", "note-completion", "map-labelling", "flow-chart-completion", "diagram-label-completion", "table-completion")
 SUBJECTIVE_TYPES = ("essay", "speaking-cue")
 
 
@@ -370,6 +400,8 @@ def _subjective_feedback(item: dict, answer: str) -> dict:
         accuracy = round((band / 9) * 100)
         criteria = _speaking_criteria(clean_answer)
         text_analysis["insights"] = (text_analysis.get("insights") or []) + [filler_advice]
+        speaking_teach = _speaking_spot_teach(item, clean_answer) if clean_answer.strip() else None
+        spot_correction = (speaking_teach or {}).get("corrected", "") or ""
         logic_default = "Answer in the Part 1 shape (answer + reason + example), the Part 2 story (4 points), or the Part 3 mini-essay (claim, reason, example)."
         tip_default = "Use linking phrases and keep a steady rhythm; record and listen back once."
         suggestions_default = "Practise the same question again aloud, adding one more reason or example each time."
@@ -385,11 +417,14 @@ def _subjective_feedback(item: dict, answer: str) -> dict:
         suggestions_default = "Rewrite once with the model answer in view, then compare paragraph by paragraph."
         band_advice_default = "Each band rise follows one focused fix: structure, then range, then accuracy."
     model = item.get("correctAnswer") or item.get("explanation") or "A model answer would state a clear position, support it with reasons and examples, and use accurate grammar and vocabulary."
+    sample_high_band = spot_correction or model if item.get("type") == "speaking-cue" else model
     return {
         "band": band,
         "accuracy": accuracy,
         "modelAnswer": model,
-        "sampleHighBandAnswer": model,
+        "sampleHighBandAnswer": sample_high_band,
+        "spotCorrection": spot_correction,
+        "speakingTeach": speaking_teach,
         "criteria": criteria,
         "explanation": item.get("explanation", "Compare your response with the model answer and focus on structure, range, and accuracy."),
         "logic": item.get("logic", logic_default),
@@ -398,6 +433,187 @@ def _subjective_feedback(item: dict, answer: str) -> dict:
         "bandAdvice": item.get("bandAdvice", band_advice_default),
         "textAnalysis": text_analysis,
         "fillerAdvice": filler_advice,
+    }
+
+
+def _segment_sentences(text: str) -> list[str]:
+    parts = re.split(r"(?<=[.!?])\s+", text.strip())
+    return [part.strip() for part in parts if part.strip()]
+
+
+def _segments_from_diff(student_text: str, corrected_text: str) -> tuple[list[dict], list[dict]]:
+    """Deterministic fallback passages: split both answers into sentences and
+    tag with similarity (good keep / improve changed)."""
+    student_sentences = _segment_sentences(student_text)
+    corrected_sentences = _segment_sentences(corrected_text)
+    original: list[dict] = []
+    passage: list[dict] = []
+    if not student_sentences or not corrected_sentences:
+        return original, passage
+    for sentence in student_sentences:
+        best, best_ratio = "", 0.0
+        for candidate in corrected_sentences:
+            ratio = difflib.SequenceMatcher(None, sentence.lower(), candidate.lower()).ratio()
+            if ratio > best_ratio:
+                best, best_ratio = candidate, ratio
+        good = best_ratio >= 0.72
+        original.append(
+            {
+                "text": sentence,
+                "tag": "good" if good else "improve",
+                "tip": "" if good else f"Say it as: {best}",
+            }
+        )
+    for candidate in corrected_sentences:
+        best_student, best_ratio = "", 0.0
+        for sentence in student_sentences:
+            ratio = difflib.SequenceMatcher(None, sentence.lower(), candidate.lower()).ratio()
+            if ratio > best_ratio:
+                best_student, best_ratio = sentence, ratio
+        good = best_ratio >= 0.72
+        passage.append(
+            {
+                "text": candidate,
+                "tag": "good" if good else "improve",
+                "tip": "" if good else f"Fix in \"{best_student}\"",
+            }
+        )
+    return original, passage
+
+
+def _speaking_spot_teach(item: dict, clean_answer: str) -> dict:
+    """Teach a speaking answer 'on the spot' like an official IELTS tutor:
+    a corrected/refined Band-7 version of the student's OWN answer — shown even
+    when the answer was already good — plus line-by-line pointers (exact
+    sentence + problem + fix), grammar and vocabulary fixes, filler notes, and
+    a short quick-change list. One AI call, strict JSON."""
+    empty = {
+        "corrected": "",
+        "lengthRule": "",
+        "passage": [],
+        "originalPassage": [],
+        "lines": [],
+        "grammar": [],
+        "vocabulary": [],
+        "fillers": [],
+        "changes": [],
+    }
+    if not clean_answer.strip() or not gemini.is_gemini_available():
+        return empty
+    prompt_text = str(item.get("prompt") or item.get("question") or "")
+    part_label = str(item.get("typeLabel") or "").strip()
+    type_name = str(item.get("typeName") or "").strip()
+    length_rule = _TYPE_LENGTHS.get(type_name, "")
+    if length_rule:
+        length_guide_sentence = (
+            "- The corrected answer MUST follow this question type's exact length and sentence plan: "
+            f"\"{length_rule}\". Write exactly the sentence count the plan names; every sentence does "
+            "its planned role in order (e.g. the fact, one detail, then stop) and the whole answer "
+            "fits the seconds stated. Do not add extra sentences.\n"
+        )
+    else:
+        length_guide_sentence = ""
+    part_guide = {
+        "Part 1": "2-4 short spoken sentences: direct answer + reason + one small detail",
+        "Part 2": "cover the cue-card points as a story and keep talking for about 2 minutes",
+        "Part 3": "position + reason + evidence + a nuance (around four to six sentences)",
+    }.get(part_label, "the natural length for that part of the IELTS Speaking test")
+    numbered = "\n".join(
+        f"[{i}] {line.strip()}" for i, line in enumerate(clean_answer.splitlines(), 1) if line.strip()
+    ) or clean_answer[:1200]
+    teach_prompt = (
+        "You are an official IELTS Speaking tutor correcting a student live exactly the way "
+        "official IELTS guides and examiner advice teach: answer the question directly, keep the "
+        "student's own ideas, stay natural, never sound like written or AI text.\n\n"
+        f"Question (IELTS Speaking {part_label}):\n{prompt_text[:500]}\n\n"
+        f"Student's running answer (numbered lines):\n{numbered[:1400]}\n\n"
+        "Return ONLY JSON with exactly these keys:\n"
+        '- "corrected": the corrected natural Band-7 version of the WHOLE answer following: '
+        f'{part_guide}. Spoken English with contractions, no headings, no quotes. '
+        "If the student's answer is already good then keep it whole, pay only tiny polish (flow, "
+        "one better word, one stronger ending) — the corrected answer is ALWAYS given.\n"
+        '- "lines": one entry PER weak line ONLY — when the answer is already good this list is empty: '
+        '{"n": line number, "quote": "the exact words from that line", '
+        '"problem": "what is wrong (grammar / vocabulary / tense / not answering / too short) ", '
+        '"fix": "exactly how to say that line correctly"}.\n'
+        '- "grammar": [{"sentence": "exact original fragment", "issue": "the rule broken", '
+        '"say": "correct version"}] — empty when nothing to fix.\n'
+        '- "vocabulary": [{"word": "original word", "better": "more official natural word or phrase", '
+        '"why": "one line"}] — only when the word is weak, never to decorate.\n'
+        '- "fillers": [{"word": "um/you know/er", "line": line number}] for every filler you spot.\n'
+        '- "changes": short list of the 3-4 exact changes to make in THIS answer (what + where); '
+        'for a good answer give the small refinements only, never fake problems.\n'
+        '- "passage": the corrected/refined answer split into segments in reading order, covering the '
+        'final answer from start to finish with NO gaps: {"text": "segment text", '
+        '"tag": "good" when the student already wrote it exactly right, "improve" when you changed or '
+        'fixed it, "tip": for improve segments a short logic tip — why and how to improve (for good '
+        'segments keep "tip" short or empty)}.\n'
+        '- "originalPassage": the STUDENT\'s OWN answer verbatim, split into segments in the same '
+        'reading order, keeping their exact words (never rewrite them here — only split): '
+        '{"text": "the student\'s exact words", "tag": "good" when the student wrote that part '
+        'correctly, "improve" when that part has a mistake, "tip": for improve entries the short '
+        'logic tip — what the mistake is and how to correct it}.',
+        "Use ONLY official IELTS guide style. No generic advice, no extra sections, no markdown.\n"
+        "The \"passage\" and \"originalPassage\" arrays are MANDATORY: always split the passage into "
+        "segments (at least at every sentence boundary) even for a short answer, and \"originalPassage\" "
+        "must always mirror the student's answer verbatim with its split plus tags.\n"
+        f"{length_guide_sentence}"
+    )
+    data = None
+    for _attempt in range(2):
+        try:
+            data = gemini.generate_json(
+                teach_prompt,
+                system_instruction="You are an official IELTS examiner teaching on the spot. Output valid JSON only.",
+                use_cache=False,
+                temperature=0.4,
+            )
+        except Exception:
+            data = None
+        if isinstance(data, dict) and (data.get("passage") or data.get("originalPassage")):
+            break
+    if not isinstance(data, dict):
+        data = {}
+    corrected = str(data.get("corrected") or "").strip()
+    if not corrected:
+        try:
+            fallback = gemini.generate_text(
+                "You are an official IELTS Speaking tutor. Rewrite this student's answer into the "
+                "correct natural way to say it for Band 7 — keep their own ideas, fix every error, "
+                "spoken English with contractions. " + part_guide + "\n\n"
+                f"Question (IELTS Speaking {part_label}):\n{prompt_text[:500]}\n\n"
+                f"Student's answer:\n{clean_answer[:1200]}\n\n"
+                "OUTPUT ONLY the corrected answer.",
+                use_cache=False,
+                temperature=0.4,
+            )
+        except Exception:
+            fallback = ""
+        corrected = (fallback or "").strip()
+    if not data.get("passage") or not data.get("originalPassage"):
+        diff_original, diff_passage = _segments_from_diff(clean_answer, corrected)
+        if not data.get("originalPassage") and diff_original:
+            data["originalPassage"] = diff_original
+        if not data.get("passage") and diff_passage:
+            data["passage"] = diff_passage
+    return {
+        "corrected": corrected[:1500],
+        "lengthRule": length_rule,
+        "passage": [
+            p
+            for p in (data.get("passage") or [])
+            if isinstance(p, dict) and str(p.get("text") or "").strip() and str(p.get("tag") or "") in ("good", "improve")
+        ][:40],
+        "originalPassage": [
+            p
+            for p in (data.get("originalPassage") or [])
+            if isinstance(p, dict) and str(p.get("text") or "").strip() and str(p.get("tag") or "") in ("good", "improve")
+        ][:40],
+        "lines": [l for l in (data.get("lines") or []) if isinstance(l, dict)][:10],
+        "grammar": [g for g in (data.get("grammar") or []) if isinstance(g, dict)][:10],
+        "vocabulary": [v for v in (data.get("vocabulary") or []) if isinstance(v, dict)][:8],
+        "fillers": [f for f in (data.get("fillers") or []) if isinstance(f, dict)][:8],
+        "changes": [str(c).strip() for c in (data.get("changes") or [])][:5],
     }
 
 
@@ -415,6 +631,8 @@ def evaluate_item(item: dict, user_answer: str) -> dict:
                 "verdict": "Good response" if feedback["band"] >= 6.0 else "Needs work",
                 "idealAnswer": feedback["modelAnswer"],
                 "sampleHighBandAnswer": feedback.get("sampleHighBandAnswer") or feedback["modelAnswer"],
+                "spotCorrection": feedback.get("spotCorrection", ""),
+                "speakingTeach": feedback.get("speakingTeach") or None,
                 "criteria": feedback.get("criteria") or [],
                 "explanation": feedback["explanation"],
                 "logic": feedback["logic"],
@@ -470,6 +688,106 @@ Band must be a half-band number between 3.5 and 9.0."""
         return data
     except Exception:
         return None
+
+
+def _gemini_judge(
+    skill: str,
+    text: str,
+    prompt: str,
+    temperature: float,
+    judge_label: str,
+) -> dict | None:
+    """One independent examiner pass. Each judge gets a slightly different
+    instruction flavour + temperature so the ensemble sees real variance."""
+    if not gemini.is_gemini_available():
+        return None
+    focus = {
+        "writing": "assess Task Achievement, Coherence & Cohesion, Lexical Resource and Grammatical Range and Accuracy",
+        "speaking": "assess Fluency & Coherence, Lexical Resource, Grammatical Range and Accuracy and Pronunciation",
+    }.get(skill, "assess accuracy, skill and IELTS readiness")
+    prompt_block = f"""You are an independent IELTS examiner ({judge_label}) on a verification panel.
+
+Evaluate this {skill} answer for the question below. {focus.capitalize()}.
+
+Question: {prompt[:500]}
+
+Candidate answer:
+{text[:3000]}
+
+Return ONLY JSON, no prose, with keys:
+{{"band": number, "summary": "2-3 sentence examiner summary", "strengths": ["..."], "weaknesses": ["..."], "nextPlan": ["..."], "bandDescriptorNotes": ["..."]}}
+Band must be a half-band number between 3.5 and 9.0."""
+    try:
+        data = gemini.generate_json(
+            prompt_block,
+            system_instruction="You are a strict but fair IELTS examiner on a verification panel. Output valid JSON only.",
+            temperature=temperature,
+        )
+        if not isinstance(data, dict) or not data.get("band"):
+            return None
+        data["band"] = float(data["band"])
+        for key in ("strengths", "weaknesses", "nextPlan", "bandDescriptorNotes"):
+            if not isinstance(data.get(key), list):
+                data[key] = [str(data.get(key, ""))]
+        data["judge"] = judge_label
+        return data
+    except Exception:
+        return None
+
+
+def _ensemble_subjective(skill: str, text: str, prompt: str) -> dict | None:
+    """Run N independent examiner judges and return a consensus verdict.
+
+    Mirrors how real assessment platforms de-risk a single AI verdict:
+    multiple judges -> median band -> agreement/confidence score -> report.
+    """
+    judges = [
+        _gemini_judge(skill, text, prompt, 0.35, "Judge A"),
+        _gemini_judge(skill, text, prompt, 0.7, "Judge B"),
+        _gemini_judge(skill, text, prompt, 1.0, "Judge C"),
+    ]
+    valid = [judge for judge in judges if judge]
+    if not valid:
+        return None
+    bands = sorted(judge["band"] for judge in valid)
+    median = round_band(bands[len(bands) // 2] if len(bands) % 2 == 1 else (bands[len(bands) // 2 - 1] + bands[len(bands) // 2]) / 2)
+    spread = bands[-1] - bands[0]
+    agreement = round(max(0.0, min(100.0, 100 - (spread / 2.5) * 100)))
+    consensus = {
+        "band": median,
+        "summary": _blend_summaries(valid, median),
+        "strengths": _merge_insights(valid, "strengths"),
+        "weaknesses": _merge_insights(valid, "weaknesses"),
+        "nextPlan": _merge_insights(valid, "nextPlan"),
+        "bandDescriptorNotes": _merge_insights(valid, "bandDescriptorNotes"),
+        "judges": [{"judge": judge["judge"], "band": judge["band"]} for judge in valid],
+        "judgeCount": len(valid),
+        "agreement": agreement,
+        "confidence": round(agreement * (len(valid) / 3)),
+    }
+    return consensus
+
+
+def _blend_summaries(judges: list[dict], band: float) -> str:
+    summaries = [str(judge.get("summary") or "").strip() for judge in judges if str(judge.get("summary") or "").strip()]
+    if not summaries:
+        return f"Panel consensus: Band {band:.1f}."
+    combined = " ".join(summaries)
+    return combined[:420] + ("…" if len(combined) > 420 else "")
+
+
+def _merge_insights(judges: list[dict], key: str) -> list[str]:
+    merged: list[str] = []
+    seen: set[str] = set()
+    for judge in judges:
+        for item in judge.get(key) or []:
+            text = str(item or "").strip()
+            if text and text.lower() not in seen:
+                seen.add(text.lower())
+                merged.append(text)
+        if len(merged) >= 6:
+            break
+    return merged[:6]
 
 
 def _gemini_objective_estimate(
@@ -537,22 +855,31 @@ def evaluate_session(db: Session, user: models.User, profile: models.StudentProf
 
     text_answers = [a for a in answers.values() if (a or "").strip() and len(a.split()) > 20]
     gemini_data = None
+    judges: list[dict] = []
+    agreement: int | None = None
+    confidence: int | None = None
     if module in ("writing", "speaking") and text_answers:
         joined = "\n\n".join(text_answers)[:3000]
         if module == "speaking":
             joined = _strip_fillers(joined)
-        gemini_data = _gemini_band_estimate(module, joined, " ".join(str(i.get("prompt", "")) for i in items)[:500])
+        gemini_data = _ensemble_subjective(module, joined, " ".join(str(i.get("prompt", "")) for i in items)[:500])
         if gemini_data:
             predicted_band = round_band(gemini_data.get("band", predicted_band))
             accuracy = round((predicted_band / 9) * 100)
+            judges = gemini_data.get("judges") or []
+            agreement = gemini_data.get("agreement")
+            confidence = gemini_data.get("confidence")
     elif module in ("reading", "listening") and scored:
         # Hybrid evaluation: the objective accuracy is authoritative, and the
-        # AI examiner confirms the band and explains the result in feedback.
+        # AI examiner panel confirms the band and explains the result.
         gemini_data = _gemini_objective_estimate(module, accuracy, objective_accuracy, wrong_by_type, skill_results)
         if gemini_data:
             ai_band = round_band(float(gemini_data.get("band", predicted_band)))
-            predicted_band = round_band(0.5 * predicted_band + 0.5 * ai_band)
+            blend = round_band(0.5 * predicted_band + 0.5 * ai_band)
+            predicted_band = blend
             accuracy = round((predicted_band / 9) * 100)
+            agreement = 100 - round(abs(predicted_band - ai_band) * 40)
+            confidence = round(max(50, min(100, agreement)))
 
     strengths: list[str] = []
     weaknesses: list[str] = []
@@ -586,6 +913,9 @@ def evaluate_session(db: Session, user: models.User, profile: models.StudentProf
         "accuracy": accuracy,
         "aiEvaluated": bool(gemini_data),
         "evaluatedBy": gemini.active_provider() if gemini_data else "offline",
+        "judges": judges,
+        "judgeAgreement": agreement,
+        "confidence": confidence if confidence is not None else (90 if not gemini_data else None),
         "examinerSummary": gemini_data.get("summary") if gemini_data else f"You scored {accuracy}% and the AI examiner estimates band {predicted_band} for this {module} session.",
         "strengths": strengths,
         "weaknesses": weaknesses,

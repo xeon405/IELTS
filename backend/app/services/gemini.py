@@ -47,8 +47,8 @@ def _retry_after(seconds: float, attempt: int) -> None:
 AI_CALL_DEADLINE_SECONDS = 10.0  # hard budget per generate call before offline fallback
 
 
-def _cache_key(prompt: str, system_instruction: str | None) -> str:
-    return hashlib.sha256(f"{system_instruction or ''}|{prompt}".encode("utf-8")).hexdigest()
+def _cache_key(prompt: str, system_instruction: str | None, temperature: float | None = None) -> str:
+    return hashlib.sha256(f"{system_instruction or ''}|{temperature or ''}|{prompt}".encode("utf-8")).hexdigest()
 
 
 def _cache_get(key: str) -> str | None:
@@ -167,7 +167,7 @@ def _extract_json(text: str) -> dict | list:
     raise ValueError("Model output contained no valid JSON")
 
 
-def _groq_generate_text(prompt: str, system_instruction: str | None) -> str:
+def _groq_generate_text(prompt: str, system_instruction: str | None, temperature: float | None = None) -> str:
     if not groq_keys():
         raise RuntimeError("Groq not configured")
     messages = []
@@ -197,7 +197,7 @@ def _groq_generate_text(prompt: str, system_instruction: str | None) -> str:
                         json={
                             "model": model,
                             "messages": messages,
-                            "temperature": 0.8,
+                            "temperature": temperature if temperature is not None else 0.8,
                             "max_tokens": max_tokens,
                         },
                     )
@@ -224,13 +224,13 @@ def _groq_generate_text(prompt: str, system_instruction: str | None) -> str:
     raise RuntimeError(f"Groq request failed: {last_error}")
 
 
-def _gemini_generate_text(prompt: str, system_instruction: str | None) -> str:
+def _gemini_generate_text(prompt: str, system_instruction: str | None, temperature: float | None = None) -> str:
     if not provider_configured("gemini"):
         raise RuntimeError("Gemini not configured")
     body: dict = {
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
         "generationConfig": {
-            "temperature": 0.8,
+            "temperature": temperature if temperature is not None else 0.8,
             "maxOutputTokens": settings.GEMINI_MAX_OUTPUT_TOKENS,
         },
     }
@@ -276,7 +276,7 @@ def _gemini_generate_text(prompt: str, system_instruction: str | None) -> str:
     raise RuntimeError(f"Gemini request failed: {last_error}")
 
 
-def generate_text(prompt: str, system_instruction: str | None = None, use_cache: bool = True) -> str:
+def generate_text(prompt: str, system_instruction: str | None = None, use_cache: bool = True, temperature: float | None = None) -> str:
     if not is_ai_available():
         raise RuntimeError("No AI provider configured")
     key = _cache_key(prompt, system_instruction)
@@ -288,11 +288,11 @@ def generate_text(prompt: str, system_instruction: str | None = None, use_cache:
     for provider in ai_provider_order():
         try:
             if provider == "groq":
-                text = _groq_generate_text(prompt, system_instruction)
+                text = _groq_generate_text(prompt, system_instruction, temperature)
                 _cache_put(key, text)
                 return text
             if provider == "gemini":
-                text = _gemini_generate_text(prompt, system_instruction)
+                text = _gemini_generate_text(prompt, system_instruction, temperature)
                 _cache_put(key, text)
                 return text
         except Exception as exc:  # noqa: BLE001
@@ -300,8 +300,8 @@ def generate_text(prompt: str, system_instruction: str | None = None, use_cache:
     raise RuntimeError(f"All AI providers failed: {last_error}")
 
 
-def generate_json(prompt: str, system_instruction: str | None = None, use_cache: bool = True) -> dict | list:
-    text = generate_text(prompt, system_instruction, use_cache=use_cache)
+def generate_json(prompt: str, system_instruction: str | None = None, use_cache: bool = True, temperature: float | None = None) -> dict | list:
+    text = generate_text(prompt, system_instruction, use_cache=use_cache, temperature=temperature)
     return _extract_json(text)
 
 

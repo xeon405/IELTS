@@ -1,12 +1,21 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import AuthShell from "@/components/auth-shell";
 import { authApi } from "@/lib/backend";
 
 export default function ForgotPasswordPage() {
+  return (
+    <Suspense fallback={null}>
+      <ForgotPasswordForm />
+    </Suspense>
+  );
+}
+
+function ForgotPasswordForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [token, setToken] = useState("");
   const [password, setPassword] = useState("");
@@ -15,6 +24,16 @@ export default function ForgotPasswordPage() {
   const [step, setStep] = useState<"request" | "reset">("request");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    const tokenParam = searchParams.get("token");
+    const emailParam = searchParams.get("email");
+    if (tokenParam) {
+      setToken(tokenParam);
+      if (emailParam) setEmail(emailParam);
+      setStep("reset");
+    }
+  }, [searchParams]);
 
   const handleRequest = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,8 +62,8 @@ export default function ForgotPasswordPage() {
       setError("Enter the reset code from your email.");
       return;
     }
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters.");
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters.");
       return;
     }
     if (password !== confirm) {
@@ -111,7 +130,7 @@ export default function ForgotPasswordPage() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="At least 6 characters"
+                placeholder="At least 8 characters"
                 className="w-full rounded-xl border border-[#d8c8a8] bg-white px-4 py-3 text-sm outline-none transition focus:border-[#17342f]"
               />
             </label>

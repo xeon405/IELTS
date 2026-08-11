@@ -2,62 +2,114 @@
 question generation, persistence, evaluation, mock tests, tutor chat and
 recommendations. The frontend only receives stripped questions and results."""
 
+import base64
+import logging
 from typing import Any
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from .. import models
 from ..config import settings
 from ..database import get_db, active_dialect
 from ..deps import get_current_user, get_or_create_profile
-from ..schemas import BrainRequest, MockRequest, OnboardingUpdate, SessionRequest, SettingsUpdate, TutorRequest
+from ..schemas import BrainRequest, MockRequest, OnboardingUpdate, SessionRequest, SettingsUpdate, TranscribeRequest, TTSRequest, TutorRequest
 from ..services import adaptive
 from ..services import evaluation_service as ev
 from ..services import gemini
 from ..services import knowledge_base as kb
+from ..services import large_bank as lb
 from ..services import orchestrator
 from ..services import recommendation
+from ..services import tts_service
+
+logger = logging.getLogger("uvicorn.error")
 
 router = APIRouter(prefix="/brain", tags=["brain"])
 
 SKILLS = ("reading", "listening", "writing", "speaking")
+
+_BANK_LOOKUP: dict[str, dict[str, dict]] = {}
+
+
+def _bank_id(module: str, mode: str, index: int) -> str:
+    return f"bank-{module}-{_slug(mode)}-{index + 1}"
+
+
+def _bank_lookup_for(module: str) -> dict[str, dict]:
+    """id -> item map for a module's offline large bank (cached in-process).
+
+    Ids are pool-position based (per question type), which is exactly how the
+    bank endpoint stamps them, so a stripped bank session can always be
+    re-enriched with the correct answers server-side.
+    """
+    if module not in _BANK_LOOKUP:
+        lookup: dict[str, dict] = {}
+        by_type = lb.LARGE_BY_TYPE.get(module, {})
+        for mode, pool in by_type.items():
+            for index, item in enumerate(pool):
+                key = str(item.get("id")) if str(item.get("id") or "") else _bank_id(module, mode, index)
+                copy = dict(item)
+                copy["id"] = key
+                lookup[key] = copy
+        _BANK_LOOKUP[module] = lookup
+    return _BANK_LOOKUP[module]
 
 
 def _profile_dict(db: Session, user: models.User, profile: models.StudentProfile) -> dict:
     return adaptive.serialize_profile(db, profile)
 
 
-def _load_generated_items(db: Session, user_id: int, session: dict | None) -> list[dict] | None:
+def _load_generated_items(db: Session, user_id: int, module: str, session: dict | None) -> list[dict] | None:
+    """Find the stored session row for one skill only (fast path for checks)."""
     if not session:
         return None
     session_id = str(session.get("id") or "")
     if not session_id:
         return None
-    for skill in SKILLS:
-        model = models.SESSION_MODELS[skill]
-        rows = (
-            db.query(model)
-            .filter(model.user_id == user_id)
-            .order_by(model.id.desc())
-            .limit(50)
-            .all()
-        )
-        for row in rows:
-            if (row.items_json or {}).get("id") == session_id:
-                return list((row.items_json or {}).get("items") or [])
+    model = models.SESSION_MODELS.get(module)
+    if model is None:
+        return None
+    rows = (
+        db.query(model)
+        .filter(model.user_id == user_id)
+        .order_by(model.id.desc())
+        .limit(50)
+        .all()
+    )
+    for row in rows:
+        if (row.items_json or {}).get("id") == session_id:
+            return list((row.items_json or {}).get("items") or [])
     return None
 
 
 def _session_with_answers(db: Session, user_id: int, session: dict | None) -> dict:
+    """Session with originals (correct answers hidden from the browser restored).
+
+    Prefers the persisted AI session, then the offline large bank (which keeps
+    the correct answer server-side), then the raw session the client sent.
+    """
     if not session:
         return {}
-    stored = _load_generated_items(db, user_id, session)
-    if stored is None:
-        return dict(session)
-    safe = dict(session)
-    safe["items"] = stored
-    return safe
+    module = str(session.get("module") or "reading")
+    stored = _load_generated_items(db, user_id, module, session)
+    if stored is not None:
+        safe = dict(session)
+        safe["items"] = stored
+        return safe
+    # Bank session: enrich stripped items with correct answers from the bank.
+    lookup = _bank_lookup_for(module)
+    if lookup and any(str(item.get("id")) in lookup for item in (session.get("items") or [])):
+        enriched: list[dict] = []
+        for item in session.get("items") or []:
+            bank_item = lookup.get(str(item.get("id")))
+            enriched.append(dict(bank_item) if bank_item else item)
+        safe = dict(session)
+        safe["items"] = enriched
+        return safe
+    return dict(session)
 
 
 @router.post("/recommend")
@@ -125,6 +177,259 @@ def check_answer(payload: SessionRequest, user: models.User = Depends(get_curren
     if not results:
         raise HTTPException(status_code=404, detail="This session could not be found. Submit the section for a full report instead.")
     return {"itemFeedback": results}
+
+
+@router.post("/bank")
+def bank(payload: SessionRequest, user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Return one offline bank session (~500 items) for a given question type.
+
+    The frontend opens the bank to see the question types and to pick a type
+    with hundreds of ready questions. Items are stripped of answers; the bank
+    endpoint and the check endpoint derive correct answers server-side.
+
+    Items are ADAPTIVELY ORDERED, not random: the profile's current band is the
+    starting difficulty, the target band is the ceiling, and questions ramp up
+    in difficulty with the weakest question type first.
+    """
+    if not payload.session:
+        raise HTTPException(status_code=400, detail="Bank request requires a module and mode.")
+    module = str((payload.session or {}).get("module") or "reading")
+    mode = str((payload.session or {}).get("mode") or "")
+    mode = kb.canonical_question_type(module, mode)
+    if not kb.is_question_type(module, mode):
+        raise HTTPException(status_code=400, detail="Pick an official question type from the bank.")
+    pool = lb.items_for_type(module, mode)
+    if not pool:
+        raise HTTPException(status_code=404, detail="That question type has no questions yet.")
+    count = int((payload.session or {}).get("questionCount") or 0) or len(pool)
+    count = max(1, min(count, len(pool)))
+
+    profile = payload.profile or {}
+    bands = {
+        s: float((profile.get("bands") or {}).get(s, 5.5) or 5.5)
+        for s in ("reading", "listening", "writing", "speaking")
+    }
+    current = bands.get(module, 5.5)
+    target = float((profile or {}).get("targetBand", 7.0) or 7.0)
+    weak_types = [str(w).strip() for w in (profile.get("weakQuestionTypes") or []) if str(w).strip()]
+
+    # Stable bank order: Question 1 is always Question 1 regardless of band
+    # or profile, so numbering never shifts between visits. Ids are stamped
+    # from the pool position so the check endpoint can re-enrich the item.
+    pool = [dict(item) for item in pool]
+    for index, item in enumerate(pool):
+        item["id"] = _bank_id(module, mode, index)
+    items = pool[:count]
+    for item in items:
+        item["difficultyBand"] = _item_difficulty(item, module)
+
+    from ..services import question_generator as qg
+    safe = qg.strip_answers({"items": items})["items"]
+    session = {
+        "id": f"bank-{module}-{mode}",
+        "module": module,
+        "mode": mode,
+        "title": f"{mode} bank",
+        "subtitle": f"{len(pool)} ready questions for {mode} — practice them in order, from band {current:.1f} upward.",
+        "durationMinutes": kb.question_type_mode_duration(module),
+        "questionCount": len(pool),
+        "questionTypes": [mode],
+        "difficultyBand": round((current + min(target, current + 1.0)) / 2, 1),
+        "examinerIntent": f"Work through the full {mode} bank with instant per-question feedback, ramping difficulty from current band {current:.1f} toward target {target:.1f}.",
+        "weakTypePriority": [mode] if mode in weak_types else weak_types[:2],
+        "items": safe,
+        "source": "offline",
+    }
+    return {"session": session, "total": len(pool), "currentBand": current, "targetBand": target}
+
+
+@router.post("/mockexam")
+def mock_exam(payload: SessionRequest, user: models.User = Depends(get_current_user)):
+    """Return one of the ten full mock exam papers (official format + timing).
+
+    ``session.set`` selects the paper (1-10); every paper is a complete test:
+    Listening 40Q/30min (+10 transfer), Reading 40Q/60min, Writing 2 tasks/60min,
+    Speaking 3 parts/14min including Part 2 prep + long turn.
+    """
+    try:
+        paper_no = int((payload.session or {}).get("set") or 1)
+    except (TypeError, ValueError):
+        paper_no = 1
+    from ..services.mock_papers import MOCK_EXAM_COUNT, build_paper
+
+    paper_no = max(1, min(paper_no, MOCK_EXAM_COUNT))
+    return {"paper": build_paper(paper_no), "count": MOCK_EXAM_COUNT}
+
+
+@router.post("/tts")
+def tts(payload: TTSRequest, _: models.User = Depends(get_current_user)):
+    """Synthesize listening script text into MP3 audio (edge-tts, disk-cached).
+
+    The frontend falls back to this real audio whenever browser speech
+    synthesis has no usable voice, so listening questions always play sound.
+    """
+    text = (payload.text or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Text to speak is required.")
+    if len(text) > 2000:
+        raise HTTPException(status_code=413, detail="Text is too long to speak.")
+    payload_bytes = tts_service.synthesize_sync(text)
+    if not payload_bytes:
+        raise HTTPException(status_code=503, detail="Speech synthesis is unavailable on this server.")
+    return Response(
+        content=payload_bytes,
+        media_type="audio/mpeg",
+        headers={"Cache-Control": "public, max-age=31536000, immutable"},
+    )
+
+
+@router.post("/transcribe")
+def transcribe(payload: TranscribeRequest, _: models.User = Depends(get_current_user)):
+    """Transcribe a recorded voice note (WAV/WebM/MP4) with Groq Whisper.
+
+    The frontend uploads the base64 audio captured by the MediaRecorder; the
+    transcript becomes the student's speaking answer text so evaluation works
+    in every browser, even where browser speech recognition is unavailable.
+    """
+    try:
+        audio_bytes = base64.b64decode(payload.audio or "")
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail="Invalid audio data.") from exc
+    if not audio_bytes:
+        raise HTTPException(status_code=400, detail="Audio payload is empty.")
+    if len(audio_bytes) > 15 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="That recording is too large (15 MB limit).")
+
+    mime = (payload.mime or "audio/wav").strip() or "audio/wav"
+    try:
+        key = gemini._pick_groq_key()
+    except RuntimeError:
+        raise HTTPException(status_code=503, detail="Transcription service is not configured on this server.")
+
+    multipart = {
+        "model": (None, "whisper-large-v3"),
+        "file": ("voice-recording." + _audio_ext(mime), audio_bytes, mime),
+    }
+    try:
+        gemini._throttle()
+        response = httpx.post(
+            "https://api.groq.com/openai/v1/audio/transcriptions",
+            headers={"Authorization": f"Bearer {key}"},
+            files=multipart,
+            timeout=120,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[transcribe] request failed: %s", exc)
+        raise HTTPException(status_code=502, detail="Could not reach the transcription service.") from exc
+    if response.status_code >= 400:
+        logger.warning("[transcribe] rejected (%s): %s", response.status_code, response.text[:400])
+        raise HTTPException(status_code=502, detail="The transcription service could not process the recording.")
+    text = str((response.json() or {}).get("text") or "").strip()
+    if not text:
+        raise HTTPException(status_code=422, detail="Nothing was detected in the recording — please speak again or type your answer.")
+    return {"text": text}
+
+
+def _audio_ext(mime: str) -> str:
+    name = (mime.split("/")[-1] or "wav").split(";")[0].lower()
+    if name in ("webm", "wav", "mp3", "m4a", "mp4", "ogg", "aac", "flac", "pcm"):
+        return name
+    return "wav"
+
+
+def _slug(value: str) -> str:
+    return "".join(ch if ch.isalnum() else "-" for ch in value.lower()).strip("-") or "type"
+
+
+def _item_difficulty(item: dict, module: str) -> float:
+    """Heuristic difficulty 4.5-9.0 for adaptively ordering bank items.
+
+    Uses the same signals IELTS itself uses: passage position (Passage 1 is
+    always the easiest), vocabulary density of the text, and the length of the
+    reasoning needed (explanation length tracks how involved the logic is).
+    """
+    prompt = str(item.get("prompt") or "")
+    context = str(item.get("context") or "")
+    options = item.get("options") or []
+    answer = str(item.get("correctAnswer") or "")
+    title = str(item.get("title") or "")
+
+    base = 5.5
+    # Passage position: Passage 1 -> 5.5, Passage 2 -> 6.5, Passage 3 -> 7.5.
+    import re
+    passage = re.search(r"Passage (\d)", title)
+    if passage:
+        base = 5.5 + max(0, int(passage.group(1)) - 1)
+    # Vocabulary density of the stimulus (longer words -> harder text).
+    words = re.findall(r"[a-zA-Z]+", context)
+    if words:
+        avg_len = sum(len(w) for w in words) / len(words)
+        base += max(-0.5, min(0.5, (avg_len - 5.0) * 0.3))
+    # Options count pushes difficulty up slightly.
+    base += min(1.0, (len(options) - 2) * 0.35) if len(options) > 2 else 0.0
+    # Answer with more words = more steps to verify.
+    base += min(1.0, len(answer.split()) * 0.2)
+    # Longer explanations imply more involved logic.
+    explanation = str(item.get("explanation") or "")
+    base += min(0.5, len(explanation.split()) / 120)
+    base = max(4.5, min(9.0, base))
+    if module == "writing" and "process" in prompt.lower():
+        base = min(9.0, base + 0.5)
+    return round(base, 1)
+
+
+def _adaptive_order_items(pool: list[dict], current: float, target: float, module: str = "reading") -> list[dict]:
+    """Difficulty ladder, the way an adaptive test works:
+
+    1. The student's current band is the starting difficulty.
+    2. Questions ramp UP toward target band in steps of ~0.5.
+    3. Every few questions a slightly EASIER question appears (warm-up/consolidation),
+       exactly like real computer-delivered IELTS keeps early items accessible.
+    """
+    scored = [(item, _item_difficulty(item, module)) for item in pool]
+
+    # Within each difficulty bucket keep the original bank order (deterministic).
+    scored.sort(key=lambda pair: pair[1])
+    buckets: dict[float, list[dict]] = {}
+    for item, difficulty in scored:
+        buckets.setdefault(round(difficulty, 1), []).append(item)
+
+    ladder: list[dict] = []
+    available = list(buckets.keys())
+    if not available:
+        return pool
+    difficulty = round(current, 1)
+    if difficulty not in buckets:
+        difficulty = min(available, key=lambda d: abs(d - difficulty))
+    guard = 0
+    while len(ladder) < len(pool):
+        bucket = buckets.get(difficulty)
+        if bucket:
+            ladder.append(bucket.pop(0))
+            guard = 0
+        else:
+            # Bucket exhausted — jump to the nearest bucket that still has items.
+            remaining_keys = [d for d, items in buckets.items() if items]
+            if not remaining_keys:
+                break
+            difficulty = min(remaining_keys, key=lambda d: abs(d - difficulty))
+            guard += 1
+            if guard > len(buckets) + 1:
+                break
+            continue
+        # Ramp up toward target, with a periodic easy consolidation question.
+        step = max(0.5, abs(target - current) / 8)
+        if len(ladder) % 5 != 0:
+            difficulty = round(difficulty + step, 1)
+        else:
+            difficulty = round(current, 1)
+        if difficulty > 9.0 or difficulty not in buckets:
+            difficulty = min(available, key=lambda d: abs(d - difficulty))
+        if not any(buckets.values()):
+            break
+    remaining = [item for bucket_items in buckets.values() for item in bucket_items]
+    ladder.extend(remaining)
+    return ladder
 
 
 @router.post("/vocab")

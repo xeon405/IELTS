@@ -220,10 +220,30 @@ _TIPS = {
         "Keep to the word limit.",
         "The summary usually follows the text order.",
     ],
-    "Table / Flow Chart Completion": [
-        "Scan the table headings to predict the missing data type.",
-        "Answers are usually copied exactly from the text.",
-        "Move through the text in the same order as the rows.",
+    "Matching Information": [
+        "Scan each paragraph's first sentence for the information being asked for.",
+        "The paragraph letter, not the content, is the answer.",
+        "Two paragraphs may mention the topic — pick the one that contains the specific detail.",
+    ],
+    "Note Completion": [
+        "Notes are short: the gap usually needs one key word or number.",
+        "Copy exactly from the text; do not paraphrase.",
+        "Notes follow the order of the passage.",
+    ],
+    "Table Completion": [
+        "Decide the missing cell type before reading (number, name, date).",
+        "Scan the row and column to locate the text passage.",
+        "Copy the exact words or figure from the text.",
+    ],
+    "Flow-chart Completion": [
+        "Read the boxes and arrows: each gap continues the previous stage.",
+        "Answers come in order through the process.",
+        "Copy exact words from the text.",
+    ],
+    "Diagram Label Completion": [
+        "Relate the description in the text to the parts of the diagram.",
+        "The label is the name of the part, not its function.",
+        "Keep the exact words used by the text.",
     ],
 }
 
@@ -231,13 +251,17 @@ _TYPES = [
     ("True / False / Not Given", "true-false"),
     ("Yes / No / Not Given", "yes-no-not-given"),
     ("Multiple Choice", "multiple-choice"),
-    ("Sentence Completion", "sentence-completion"),
-    ("Short Answer", "short-answer"),
+    ("Matching Information", "matching-information"),
     ("Matching Headings", "matching-headings"),
     ("Matching Features", "matching"),
     ("Matching Sentence Endings", "matching-sentence-endings"),
+    ("Sentence Completion", "sentence-completion"),
     ("Summary Completion", "summary-completion"),
-    ("Table / Flow Chart Completion", "table-completion"),
+    ("Note Completion", "note-completion"),
+    ("Table Completion", "table-completion"),
+    ("Flow-chart Completion", "flow-chart-completion"),
+    ("Diagram Label Completion", "diagram-label-completion"),
+    ("Short Answer", "short-answer"),
 ]
 
 _TARGET = 500
@@ -401,8 +425,39 @@ def build() -> list[Item]:
                             continue
                         made.append(_mk(type_label, type_name, f"{prefix} Summary gap",
                                         f"The passage explains that {sentence.lower()}.",
-                                        f"Complete the summary (ONE or TWO words): {sentence} {gapped[sentence.find('____') - 4:].replace(chr(95) * 4, chr(95) * 4)}",
-                                        [], value if len(value.split()) <= 2 else " ".join(value.split()[:2]), tips, i))
+                                        f"Complete the summary (ONE or TWO words): {gapped}",
+                                        [], removed, tips, i))
+                elif type_label == "Matching Information":
+                    made.append(_mk(type_label, type_name, f"{prefix} Which paragraph?",
+                                    f"The text about {topic}: {sentence}.",
+                                    f"Which paragraph (A-D) contains the information about {topic}?",
+                                    ["A", "B", "C", "D"], "B", tips, i))
+                elif type_label == "Note Completion":
+                    for k in range(2):
+                        if len(made) >= _TARGET:
+                            break
+                        gapped, removed = _gap(sentence, i + k)
+                        if not removed:
+                            continue
+                        made.append(_mk(type_label, type_name, f"{prefix} Note",
+                                        f"Notes: {sentence}.",
+                                        f"Complete the note (ONE or TWO words): {gapped}",
+                                        [], removed, tips, i))
+                elif type_label == "Table Completion":
+                    made.append(_mk(type_label, type_name, f"{prefix} Table row",
+                                    f"Complete the table. The text states: {sentence}.",
+                                    f"According to the text, fill in the missing entry for {topic}:",
+                                    [], value, tips, i))
+                elif type_label == "Flow-chart Completion":
+                    made.append(_mk(type_label, type_name, f"{prefix} Flow-chart step",
+                                    f"The flow-chart follows the text: {sentence}.",
+                                    f"Complete the flow-chart with the step linked to {topic}:",
+                                    [], value, tips, i))
+                elif type_label == "Diagram Label Completion":
+                    made.append(_mk(type_label, type_name, f"{prefix} Diagram label",
+                                    f"The diagram shows: {sentence}. The label gap is the key part named by the text.",
+                                    f"Complete the label on the diagram for {topic}:",
+                                    [], value, tips, i))
                 elif type_label == "Table / Flow Chart Completion":
                     made.append(_mk(type_label, type_name, f"{prefix} Table row",
                                     f"Complete the table. The text states: {sentence}.",

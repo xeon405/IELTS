@@ -6,6 +6,7 @@ import type {
   EvaluationResult,
   ItemFeedback,
   MockExamResult,
+  PracticalMockPaper,
   PracticeSession,
   ReadingBlueprint,
   ReportData,
@@ -56,7 +57,25 @@ async function backendFetch<T>(path: string, body: unknown): Promise<T> {
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
     const detail = (error as { detail?: string }).detail ?? `Backend request failed (${response.status})`;
-    throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+    const err = new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+    (err as Error & { status?: number }).status = response.status;
+    throw err;
+  }
+  return response.json() as Promise<T>;
+}
+
+async function backendGet<T>(path: string, params: Record<string, string>): Promise<T> {
+  const headers: Record<string, string> = {};
+  const token = getToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const query = new URLSearchParams(params).toString();
+  const response = await fetch(`${API_BASE}${path}${query ? `?${query}` : ""}`, { method: "GET", headers });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    const detail = (error as { detail?: string }).detail ?? `Backend request failed (${response.status})`;
+    const err = new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+    (err as Error & { status?: number }).status = response.status;
+    throw err;
   }
   return response.json() as Promise<T>;
 }
@@ -84,17 +103,20 @@ export interface DiagnosticResponse {
   profile: StudentLearningProfile;
 }
 
-/** Run the backend call; if the backend is unreachable, use the local brain. */
+/** Backend-first with local fallback — but ONLY when the backend is actually
+ * unreachable. Auth errors (401), missing routes (404/405) and server errors
+ * are business errors and must surface instead of silently degrading. */
 async function brainCall<T>(backend: () => Promise<T>, local: () => Promise<T>): Promise<T> {
   const up = await isBackendUp();
-  if (up) {
-    try {
-      return await backend();
-    } catch {
-      return local();
-    }
+  if (!up) return local();
+  try {
+    return await backend();
+  } catch (error) {
+    const status = (error as Error & { status?: number }).status;
+    const isNetworkError = !status || status >= 500;
+    if (!isNetworkError) throw error;
+    return local();
   }
-  return local();
 }
 
 async function patchJSON<T>(path: string, body: unknown): Promise<T> {
@@ -166,6 +188,12 @@ export const brainApi = {
       () => postJSON<MockResponse>("/api/brain/mock", { profile, answers, timing }),
     );
   },
+  mockPaper(profile: StudentLearningProfile, set: number): Promise<{ paper: PracticalMockPaper; count: number }> {
+    return brainCall(
+      () => backendFetch<{ paper: PracticalMockPaper; count: number }>("/brain/mockexam", { profile, session: { set } }),
+      () => Promise.reject(new Error("Mock papers require the backend")),
+    );
+  },
   tutor(profile: StudentLearningProfile, question: string, history?: { role: string; text: string }[]): Promise<TutorReply> {
     return brainCall(
       () => backendFetch<TutorReply>("/brain/tutor", { profile, question, history }),
@@ -186,13 +214,13 @@ export const brainApi = {
   },
   blueprints(module: Skill): Promise<BlueprintMeta[]> {
     return brainCall(
-      () => backendFetch<BlueprintMeta[]>("/brain/blueprints", { module }),
+      () => backendGet<BlueprintMeta[]>("/brain/blueprints", { module }),
       () => getJSON(`/api/brain/blueprints?module=${module}`),
     );
   },
   blueprint(module: Skill): Promise<ReadingBlueprint> {
     return brainCall(
-      () => backendFetch<ReadingBlueprint>("/brain/blueprint", { module }),
+      () => backendGet<ReadingBlueprint>("/brain/blueprint", { module }),
       () =>
         getJSON<ReadingBlueprint>(`/api/brain/blueprint?module=${module}`).catch(() =>
           module === "listening"
@@ -203,6 +231,50 @@ export const brainApi = {
                 ? getSpeakingBlueprint()
                 : getReadingBlueprint(),
         ),
+    );
+  },
+  bank(profile: StudentLearningProfile, module: Skill, mode: string, questionCount?: number): Promise<{ session: PracticeSession; total: number; currentBand?: number; targetBand?: number }> {
+    return brainCall(
+      () =>
+        backendFetch<{ session: PracticeSession; total: number; currentBand?: number; targetBand?: number }>("/brain/bank", {
+          profile,
+          session: { module, mode, ...(questionCount ? { questionCount } : {}) },
+        }),
+      () => {
+        const { getPracticeBlueprints } = require("@/lib/ielts-brain") as {
+          getPracticeBlueprints: (module: Skill) => PracticeSession[];
+        };
+        const blueprints = getPracticeBlueprints(module);
+        const matching = blueprints.filter((session) => (session.questionTypes ?? []).includes(mode));
+        const pool = matching.length > 0 ? matching.flatMap((session) => session.items) : [];
+        if (pool.length === 0) return Promise.reject(new Error("No local bank for this type"));
+        const items = (questionCount && questionCount > 0 ? pool.slice(0, questionCount) : pool).map((item) => {
+          const { correctAnswer: _correctAnswer, explanation: _explanation, logic: _logic, tip: _tip, suggestions: _suggestions, bandAdvice: _bandAdvice, ...safe } = item;
+          return safe;
+        });
+        const session: PracticeSession = {
+          id: `bank-local-${module}-${mode}`,
+          module,
+          mode,
+          title: `${mode} bank`,
+          subtitle: `${pool.length} ready questions for ${mode} — answer as many as you want.`,
+          durationMinutes:
+            module === "listening"
+              ? 10
+              : module === "writing"
+                ? (mode.startsWith("Task 1") || mode.includes("Task 1") ? 20 : 40)
+                : module === "speaking"
+                  ? 5
+                  : 12,
+          questionCount: items.length,
+          questionTypes: [mode],
+          difficultyBand: 6.0,
+          examinerIntent: `Work through the full ${mode} bank with instant per-question feedback.`,
+          items,
+          source: "offline",
+        };
+        return Promise.resolve({ session, total: items.length });
+      },
     );
   },
 };

@@ -1,10 +1,15 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=BACKEND_DIR / ".env", env_file_encoding="utf-8", extra="ignore"
+    )
 
     APP_NAME: str = "AI IELTS Examiner API"
     APP_ENV: str = "development"
@@ -47,7 +52,7 @@ class Settings(BaseSettings):
     GROQ_TIMEOUT_SECONDS: float = 20.0
     GROQ_MAX_TOKENS: int = 4096
 
-    CORS_ORIGINS: str = "http://localhost:4000,http://localhost:3000"
+    CORS_ORIGINS: str = "http://localhost:4000,http://127.0.0.1:4000,http://localhost:3000,http://localhost:3100,http://127.0.0.1:3100"
 
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587

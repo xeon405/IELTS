@@ -22,6 +22,9 @@ import {
 
 import { cn } from "@/lib/utils";
 import { authApi, isBackendUp, setAuth } from "@/lib/backend";
+import GoogleSignIn from "@/components/google-sign-in";
+
+const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? "";
 
 const features = [
   {
@@ -141,7 +144,7 @@ export default function LandingPage() {
           <div className="grid h-11 w-11 place-items-center rounded-2xl bg-[#17342f] text-[#e3b65f]">
             <Brain className="h-6 w-6" />
           </div>
-          <span className="font-serif text-2xl font-semibold tracking-tight">IELTS Examiner</span>
+          <span className="font-serif text-2xl font-semibold tracking-tight">Mkg.IELTS.COM</span>
         </div>
         <nav className="hidden items-center gap-8 text-sm font-bold text-[#315149] md:flex">
           <a href="#features" className="hover:text-[#17342f]">Features</a>
@@ -406,7 +409,7 @@ export default function LandingPage() {
               <Brain className="h-5 w-5" />
             </div>
             <div>
-              <p className="font-serif text-xl font-semibold text-white">IELTS Examiner</p>
+              <p className="font-serif text-xl font-semibold text-white">Mkg.IELTS.COM</p>
               <p className="text-xs text-[#b9cdc5]">Interface and AI Brain in one learning loop.</p>
             </div>
           </div>
@@ -456,11 +459,26 @@ function AuthModal({ mode, onClose, onSwitch }: { mode: "login" | "register"; on
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState("");
   const [forgotSent, setForgotSent] = useState(false);
   const [verifyStep, setVerifyStep] = useState(false);
   const [verifyCode, setVerifyCode] = useState("");
   const [verifyDevCode, setVerifyDevCode] = useState<string | null>(null);
+
+  async function handleGoogle(credential: string) {
+    setGoogleLoading(true);
+    setError("");
+    try {
+      const response = await authApi.google(credential, GOOGLE_CLIENT_ID);
+      setAuth(response.access_token, response.profile);
+      window.location.href = "/app";
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Google sign-in failed. Please try again.");
+    } finally {
+      setGoogleLoading(false);
+    }
+  }
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -576,7 +594,7 @@ function AuthModal({ mode, onClose, onSwitch }: { mode: "login" | "register"; on
               {verifyStep ? "One last thing" : mode === "login" ? "Welcome back" : "Create your account"}
             </p>
             <h3 className="mt-2 font-serif text-3xl font-semibold text-[#17342f]">
-              {verifyStep ? "Verify your email" : mode === "login" ? "Log in to IELTS Examiner" : "Register for IELTS Examiner"}
+              {verifyStep ? "Verify your email" : mode === "login" ? "Log in to Mkg.IELTS.COM" : "Register for Mkg.IELTS.COM"}
             </h3>
           </div>
           <button onClick={onClose} className="rounded-xl p-2 text-[#66746e] transition hover:bg-[#f5eddc]" aria-label="Close">
@@ -662,6 +680,20 @@ function AuthModal({ mode, onClose, onSwitch }: { mode: "login" | "register"; on
             >
               {loading ? "Connecting…" : mode === "login" ? "Log in & enter the app" : "Create account"}
             </button>
+            <div className="flex items-center gap-3 pt-1">
+              <span className="h-px flex-1 bg-[#e3dac6]" />
+              <span className="text-xs font-black uppercase tracking-[0.18em] text-[#8b6f39]">or</span>
+              <span className="h-px flex-1 bg-[#e3dac6]" />
+            </div>
+            {googleLoading ? (
+              <p className="rounded-2xl bg-[#17342f]/5 px-4 py-3 text-center text-sm font-bold text-[#17342f]">
+                Signing in with Google…
+              </p>
+            ) : (
+              <div className="flex justify-center">
+                <GoogleSignIn clientId={GOOGLE_CLIENT_ID} onCredential={handleGoogle} />
+              </div>
+            )}
           </form>
         )}
 
@@ -677,7 +709,7 @@ function AuthModal({ mode, onClose, onSwitch }: { mode: "login" | "register"; on
 
         {!verifyStep ? (
           <p className="mt-5 text-center text-sm text-[#66746e]">
-            {mode === "login" ? "New to IELTS Examiner?" : "Already have an account?"}{" "}
+            {mode === "login" ? "New to Mkg.IELTS.COM?" : "Already have an account?"}{" "}
             <button onClick={onSwitch} className="font-black text-[#2f7151] hover:underline">
               {mode === "login" ? "Register" : "Log in"}
             </button>
