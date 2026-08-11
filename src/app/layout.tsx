@@ -20,8 +20,8 @@ const spaceMono = Space_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AI IELTS Examiner",
-  description: "Adaptive IELTS examiner and personal tutor powered by an AI Brain.",
+  title: "AI Duolingo Examiner",
+  description: "Adaptive Duolingo English Test examiner powered by an AI Brain.",
 };
 
 export default function RootLayout({

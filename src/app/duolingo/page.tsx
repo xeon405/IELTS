@@ -11,7 +11,6 @@ import {
   ClipboardList,
   Gauge,
   Headphones,
-  Home,
   Layers,
   LineChart,
   Mic,
@@ -26,7 +25,6 @@ import {
   UserRound,
   Volume2,
 } from "lucide-react";
-import Link from "next/link";
 
 import { cn } from "@/lib/utils";
 import {
@@ -299,10 +297,6 @@ export default function DuolingoPage() {
               );
             })}
           </nav>
-          <Link href="/" className="mt-4 flex items-center justify-center gap-2 rounded-2xl border border-[#d7cab0] bg-white/70 px-4 py-3 text-sm font-semibold text-[#315149] transition hover:bg-white">
-            <Home className="h-4 w-4" />
-            IELTS preview
-          </Link>
           <button onClick={resetDemo} className="mt-3 flex items-center justify-center gap-2 rounded-2xl border border-[#d7cab0] bg-white/70 px-4 py-3 text-sm font-semibold text-[#6d4d2d] transition hover:bg-white">
             <RotateCcw className="h-4 w-4" />
             Reset demo
