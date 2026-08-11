@@ -185,6 +185,13 @@ export default function LandingPage() {
             Try the demo app
             <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
           </Link>
+          <Link
+            href="/duolingo"
+            className="group inline-flex items-center gap-2 rounded-2xl bg-[#e3b65f] px-8 py-4 text-sm font-black text-[#17342f] shadow-xl shadow-[#e3b65f]/20 transition hover:-translate-y-1"
+          >
+            Duolingo preview
+            <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
+          </Link>
           <a
             href="#features"
             className="rounded-2xl border border-[#d8c8a8] bg-white/70 px-8 py-4 text-sm font-black text-[#17342f] transition hover:bg-white"
