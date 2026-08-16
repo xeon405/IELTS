@@ -9,6 +9,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    Index,
     text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -33,7 +34,7 @@ class User(Base):
     google_sub: Mapped[str | None] = mapped_column(String(255), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     email_verified: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("true"), nullable=False)
-    verification_code: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    verification_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     verification_code_expires: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
@@ -149,6 +150,9 @@ class MockTest(Base):
 
 class Question(Base):
     __tablename__ = "questions"
+    __table_args__ = (
+        Index("ix_questions_user_prompt", "user_id", "prompt"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)

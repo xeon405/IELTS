@@ -16,11 +16,14 @@ _LOCK = threading.Lock()
 
 
 def _client_key(request: Request) -> str:
-    if request.client and request.client.host:
-        return request.client.host
+    # Behind a reverse proxy (Render, Nginx, etc.) the client's real IP is only
+    # visible via X-Forwarded-For (added by the proxy). Trust its first value so
+    # users behind the proxy don't all collapse into one rate-limit bucket.
     forwarded = request.headers.get("x-forwarded-for")
     if forwarded:
         return forwarded.split(",")[0].strip()
+    if request.client and request.client.host:
+        return request.client.host
     return "unknown"
 
 
@@ -40,12 +43,12 @@ def check_rate_limit(request: Request, scope: str = "auth", max_per_window: int 
             )
         _COUNTERS[key] = (window_start, count + 1)
         if len(_COUNTERS) > 10_000:
+            # Evict only stale entries; never wipe live counters (a burst of
+            # traffic must not reset every user's brute-force window).
             cutoff = now - 2 * window
-            _COUNTERS.clear()
-
-    for key in list(_COUNTERS):
-        if now - _COUNTERS[key][0] >= 2 * window:
-            _COUNTERS.pop(key, None)
+            for stale_key, (started, _count) in list(_COUNTERS.items()):
+                if started < cutoff:
+                    _COUNTERS.pop(stale_key, None)
 
 
 def rate_limit(scope: str = "auth", max_per_window: int | None = None, window_seconds: int | None = None):

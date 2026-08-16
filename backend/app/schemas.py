@@ -112,14 +112,16 @@ class ResendResponse(BaseModel):
 class TranscribeRequest(BaseModel):
     """A base64-encoded voice recording (WAV/WebM/MP4) to transcribe with Whisper."""
 
-    audio: str
-    mime: str = "audio/wav"
+    # ~20 MB of raw audio -> ~28 MB base64. Generous, but bounded: unbounded
+    # bodies would let a client exhaust memory / AI quota in a single request.
+    audio: str = Field(max_length=40_000_000)
+    mime: str = Field(default="audio/wav", max_length=40)
 
 
 class TTSRequest(BaseModel):
     """Plain text to synthesize into MP3 listening audio."""
 
-    text: str
+    text: str = Field(min_length=1, max_length=10_000)
 
 
 class BrainRequest(BaseModel):
@@ -145,8 +147,8 @@ class MockRequest(BaseModel):
 
 class TutorRequest(BaseModel):
     profile: dict[str, Any] | None = None
-    question: str
-    history: list[dict[str, str]] = Field(default_factory=list)
+    question: str = Field(min_length=1, max_length=4_000)
+    history: list[dict[str, str]] = Field(default_factory=list, max_length=100)
 
 
 class DiagnosticAnswerItem(BaseModel):

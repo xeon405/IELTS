@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Fraunces, Plus_Jakarta_Sans, Space_Mono } from "next/font/google";
 import Script from "next/script";
+import { AppErrorBoundary } from "@/components/error-boundary";
 import "./globals.css";
 
 const plusJakarta = Plus_Jakarta_Sans({
@@ -34,9 +35,9 @@ export default function RootLayout({
       <body
         className={`${plusJakarta.variable} ${fraunces.variable} ${spaceMono.variable} antialiased`}
       >
-        {children}
+        <AppErrorBoundary>{children}</AppErrorBoundary>
         {/* WARNING FOR AGENT: DO NOT REMOVE THIS SCRIPT */}
-        <Script src="https://cdn.jsdelivr.net/gh/IdeavoAI/ideavo-scripts@latest/scripts/ideavo.min.js" />
+        <Script src="https://cdn.jsdelivr.net/gh/IdeavoAI/ideavo-scripts@1.0.4/scripts/ideavo.min.js" strategy="afterInteractive" />
       </body>
     </html>
   );

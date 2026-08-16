@@ -126,12 +126,19 @@ def get_recommendation(payload: BrainRequest, user: models.User = Depends(get_cu
     return {"recommendation": result["recommendation"], "session": result["session"]}
 
 
+def _safe_int(value: Any, default: int | None = None) -> int | None:
+    try:
+        return int(value) if value is not None else default
+    except (TypeError, ValueError):
+        return default
+
+
 @router.post("/session")
 def session(payload: SessionRequest, user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     profile = get_or_create_profile(db, user)
     module = str((payload.session or {}).get("module") or "reading")
     mode = str((payload.session or {}).get("mode") or "Question by Question")
-    count = int((payload.session or {}).get("questionCount") or 0) or None
+    count = _safe_int((payload.session or {}).get("questionCount")) or None
     question_type = str((payload.session or {}).get("questionType") or "") or None
     full = orchestrator.generate_session(db, user, profile, module, mode, count, question_type)
     full["source"] = "ai" if gemini.is_ai_available() else "offline"
@@ -201,7 +208,7 @@ def bank(payload: SessionRequest, user: models.User = Depends(get_current_user),
     pool = lb.items_for_type(module, mode)
     if not pool:
         raise HTTPException(status_code=404, detail="That question type has no questions yet.")
-    count = int((payload.session or {}).get("questionCount") or 0) or len(pool)
+    count = _safe_int((payload.session or {}).get("questionCount")) or len(pool)
     count = max(1, min(count, len(pool)))
 
     profile = payload.profile or {}
@@ -486,6 +493,22 @@ def _fallback_vocab_word(seen: set[str]) -> dict:
 @router.post("/mock")
 def mock(payload: MockRequest, user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     profile = get_or_create_profile(db, user)
+    answered = {
+        item_id: value
+        for item_id, value in (payload.answers or {}).items()
+        if str(value or "").strip()
+    }
+    if not answered:
+        # An unattempted mock must not write BandScores/MockTest rows or
+        # drag the profile down — return a clean "nothing to grade" result.
+        return {
+            "result": {
+                "overallBand": None,
+                "message": "You didn't answer any questions, so there is nothing to evaluate yet. Attempt the sections first.",
+            },
+            "updatedProfile": _profile_dict(db, user, profile),
+            "questions": {},
+        }
     section_results: dict[str, dict] = {}
     questions: dict[str, Any] = {}
     for skill in SKILLS:

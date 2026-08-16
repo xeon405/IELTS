@@ -832,6 +832,11 @@ Band must be a half-band number between 3.5 and 9.0, and should stay close to th
 def evaluate_session(db: Session, user: models.User, profile: models.StudentProfile, session_data: dict, answers: dict[str, str], timing: dict | None = None) -> dict:
     module = str(session_data.get("module") or "reading")
     items = session_data.get("items") or []
+    answered_ids = {
+        item_id
+        for item_id, raw in (answers or {}).items()
+        if str(raw or "").strip()
+    }
     skill_results: list[dict] = []
     wrong_by_type: dict[str, int] = {}
     total_score = 0.0
@@ -845,6 +850,25 @@ def evaluate_session(db: Session, user: models.User, profile: models.StudentProf
         scored += 1
         if not graded.get("isCorrect") and graded.get("type") in OBJECTIVE_TYPES:
             wrong_by_type[str(graded.get("type"))] = wrong_by_type.get(str(graded.get("type")), 0) + 1
+
+    if not scored or not answered_ids:
+        # Nothing was actually answered (e.g. accidental submit). Do NOT grade
+        # every item as wrong, write a BandScore or drag the profile down.
+        return {
+            "sessionId": str(session_data.get("id") or "practice"),
+            "module": module,
+            "predictedBand": None,
+            "accuracy": 0,
+            "aiEvaluated": False,
+            "evaluatedBy": "offline",
+            "examinerSummary": "You didn't answer any questions, so there's nothing to evaluate yet. Submit the section once you've attempted it.",
+            "strengths": [],
+            "weaknesses": [],
+            "nextPlan": [],
+            "itemFeedback": skill_results,
+            "perItemFeedback": skill_results,
+            "persisted": False,
+        }
 
     accuracy = round((total_score / scored) * 100) if scored else 0
     objective_only = [r for r in skill_results if r["type"] in OBJECTIVE_TYPES]
@@ -927,13 +951,19 @@ def evaluate_session(db: Session, user: models.User, profile: models.StudentProf
     if module in ("writing", "speaking") and skill_results and skill_results[0].get("feedback", {}).get("textAnalysis"):
         result["textAnalysis"] = skill_results[0]["feedback"]["textAnalysis"]
 
-    total_seconds = (timing or {}).get("totalSeconds")
+    total_seconds = (timing or {}).get("totalSeconds") if timing else None
+    try:
+        duration_minutes = int(session_data.get("durationMinutes") or 0) or kb.mode_duration(module, str(session_data.get("mode") or "Quick Practice"))
+        total_seconds_i = int(total_seconds) if total_seconds is not None else None
+    except (TypeError, ValueError):
+        duration_minutes = kb.mode_duration(module, str(session_data.get("mode") or "Quick Practice"))
+        total_seconds_i = None
     metrics = compute_timing_metrics(
         module,
         items,
         answers,
-        int(session_data.get("durationMinutes") or 0) or kb.mode_duration(module, str(session_data.get("mode") or "Quick Practice")),
-        int(total_seconds) if total_seconds is not None else None,
+        duration_minutes,
+        total_seconds_i,
     )
     result.update({"timing": metrics["timing"], "speed": metrics["speed"], "timeManagement": metrics["timeManagement"]})
 

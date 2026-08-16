@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import AuthShell from "@/components/auth-shell";
 import GoogleSignIn from "@/components/google-sign-in";
@@ -18,9 +18,11 @@ export default function LoginPage() {
 
   // Already signed in (e.g. pressing the back arrow after logging in)?
   // Never wipe the session - send the student straight back to the app.
-  if (isAuthenticated()) {
-    router.replace("/app");
-  }
+  useEffect(() => {
+    if (isAuthenticated()) {
+      router.replace("/app");
+    }
+  }, [router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

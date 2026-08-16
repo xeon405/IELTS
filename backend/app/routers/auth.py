@@ -211,7 +211,9 @@ def _issue_verification(db: Session, user: models.User) -> tuple[str, bool]:
     """
     code = _verification_code()
     user.email_verified = False
-    user.verification_code = code
+    # Store only a SHA-256 digest so a leaked database dump can't be used
+    # to brute-force codes (rate limiting alone is not enough).
+    user.verification_code = hashlib.sha256(code.encode("utf-8")).hexdigest()
     user.verification_code_expires = datetime.now(timezone.utc) + timedelta(hours=24)
     db.commit()
     delivered = _send_email(
@@ -223,15 +225,21 @@ def _issue_verification(db: Session, user: models.User) -> tuple[str, bool]:
 
 
 def _verify_code(user: models.User, code: str) -> bool:
+    submitted = "".join(code.split())
     stored = user.verification_code or ""
-    if stored and stored.lower() == "".join(code.split()).lower():
-        expires_at = user.verification_code_expires
-        if expires_at is not None:
-            if expires_at.tzinfo is None:
-                expires_at = expires_at.replace(tzinfo=timezone.utc)
-            return expires_at >= datetime.now(timezone.utc)
-        return True
-    return False
+    if not stored:
+        return False
+    # Codes are stored as SHA-256 digests; compare against the digest of the
+    # submitted value (plaintext compare kept only for legacy rows).
+    digest = hashlib.sha256(submitted.encode("utf-8")).hexdigest()
+    if stored.lower() != digest and stored.lower() != submitted.lower():
+        return False
+    expires_at = user.verification_code_expires
+    if expires_at is not None:
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        return expires_at >= datetime.now(timezone.utc)
+    return True
 
 
 @router.post("/register", response_model=RegisterResponse, status_code=status.HTTP_201_CREATED)

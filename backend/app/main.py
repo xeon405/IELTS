@@ -40,6 +40,10 @@ async def _db_keepalive(stop: asyncio.Event):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if settings.APP_ENV == "production" and settings.JWT_SECRET in ("", "change-me-in-production"):
+        raise RuntimeError(
+            "Refusing to start in production: JWT_SECRET must be set to a long random value."
+        )
     Base.metadata.create_all(bind=engine)
     inspector = sqlalchemy.inspect(engine)
     try:
@@ -52,8 +56,13 @@ async def lifespan(app: FastAPI):
         alterations = []
         if "email_verified" not in columns:
             alterations.append("ADD COLUMN email_verified BOOLEAN NOT NULL DEFAULT TRUE")
-            alterations.append("ADD COLUMN verification_code VARCHAR(10)")
+            alterations.append("ADD COLUMN verification_code VARCHAR(64)")
             alterations.append(f"ADD COLUMN verification_code_expires {ts}")
+        elif "verification_code" in columns and dialect == "postgresql":
+            # Older databases created the column as VARCHAR(10); the code is
+            # now stored as a SHA-256 digest (64 chars). SQLite does not
+            # enforce VARCHAR length, so only PostgreSQL needs a resize.
+            alterations.append("ALTER COLUMN verification_code TYPE VARCHAR(64)")
         if "google_sub" not in columns:
             alterations.append("ADD COLUMN google_sub VARCHAR(255)")
         if alterations:

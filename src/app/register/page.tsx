@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import AuthShell from "@/components/auth-shell";
 import GoogleSignIn from "@/components/google-sign-in";
@@ -22,9 +22,11 @@ export default function RegisterPage() {
   const [verifiedEmail, setVerifiedEmail] = useState<string | null>(null);
 
   // Already signed in? Never wipe the session on mount (back arrow safety).
-  if (isAuthenticated()) {
-    router.replace("/app");
-  }
+  useEffect(() => {
+    if (isAuthenticated()) {
+      router.replace("/app");
+    }
+  }, [router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

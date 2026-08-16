@@ -18,6 +18,8 @@ export function setAuth(token: string, profile: StudentLearningProfile): void {
 
 export function clearAuth(): void {
   window.localStorage.removeItem(tokenKey);
+  window.localStorage.removeItem(profileKey);
+  window.localStorage.removeItem("ai-ielts-examiner-settings");
 }
 
 export function isAuthenticated(): boolean {
@@ -71,17 +73,25 @@ async function request<T>(path: string, init: RequestInit = {}, withAuth = true)
   return response.json() as Promise<T>;
 }
 
+let _healthCache: { at: number; up: boolean } | null = null;
+const HEALTH_TTL_MS = 15_000;
+
 export async function isBackendUp(timeoutMs = 1600): Promise<boolean> {
+  const now = Date.now();
+  if (_healthCache && now - _healthCache.at < HEALTH_TTL_MS) return _healthCache.up;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let up = false;
   try {
     const response = await fetch(`${API_BASE}/brain/health`, { signal: controller.signal });
-    return response.ok;
+    up = response.ok;
   } catch {
-    return false;
+    up = false;
   } finally {
     clearTimeout(timer);
+    _healthCache = { at: now, up };
   }
+  return up;
 }
 
 export const voiceApi = {

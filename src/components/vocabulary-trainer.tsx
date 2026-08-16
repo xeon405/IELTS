@@ -122,24 +122,31 @@ function FlashcardsView({
     if (fetching) return;
     setFetching(true);
     const seen = [...seenRef.current];
-    const results = await Promise.allSettled(
-      [brainApi.vocab(seen), brainApi.vocab(seen), brainApi.vocab(seen)],
-    );
-    const fresh: VocabWord[] = [];
-    results.forEach((result) => {
-      if (result.status === "fulfilled" && result.value.word) {
-        fresh.push(result.value.word);
-        seenRef.current.add(result.value.word.id);
+    try {
+      const result = await brainApi.vocab(seen);
+      if (result.word) {
+        freshWord(result.word);
+      } else {
+        addFallback();
       }
-    });
-    if (fresh.length === 0) {
-      const fallback = shuffle(vocabDeck).filter((item) => !seenRef.current.has(item.id)).slice(0, 3);
-      fallback.forEach((item) => seenRef.current.add(item.id));
-      fresh.push(...fallback);
+    } catch {
+      addFallback();
     }
-    setQueue((current) => [...current, ...fresh]);
     setFetching(false);
   }, [fetching]);
+
+  function freshWord(word: VocabWord) {
+    seenRef.current.add(word.id);
+    setQueue((current) => [...current, word]);
+  }
+
+  function addFallback() {
+    const fallback = shuffle(vocabDeck).filter((item) => !seenRef.current.has(item.id)).slice(0, 1);
+    if (fallback.length === 0) return;
+    const item = fallback[0];
+    seenRef.current.add(item.id);
+    setQueue((current) => [...current, item]);
+  }
 
   useEffect(() => {
     if (queue.length - index < 4) {

@@ -54,6 +54,10 @@ def _resolve_database_url() -> str:
         logger.info("Connected to PostgreSQL (%s)", normalized.split("://")[1].split("@")[-1].split("/")[0])
     except Exception as exc:  # noqa: BLE001 - environment dependent
         probe.dispose()
+        if settings.APP_ENV == "production":
+            raise RuntimeError(
+                "PostgreSQL unavailable in production; refusing to fall back to SQLite."
+            ) from exc
         logger.warning("PostgreSQL unavailable (%s); falling back to SQLite dev database", exc)
         return _DEV_SQLITE_URL
     return normalized
