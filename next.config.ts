@@ -29,9 +29,9 @@ const securityHeaders = [
       // (no nonce support in App Router). 'unsafe-eval' and third-party script
       // origins (jsdelivr) are removed; the app has zero dangerous sinks.
       "script-src 'self' 'unsafe-inline' https://accounts.google.com",
-      "style-src 'self' 'unsafe-inline'",
+      "style-src 'self' 'unsafe-inline' https://accounts.google.com",
       "font-src 'self' data:",
-      "img-src 'self' data: blob:",
+      "img-src 'self' data: blob: https://accounts.google.com",
       `connect-src 'self'${apiOrigin ? ` https://${apiOrigin}` : ""} https://accounts.google.com`,
       "frame-src https://accounts.google.com",
       "media-src 'self' blob: data:",

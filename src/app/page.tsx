@@ -428,9 +428,9 @@ export default function LandingPage() {
 function Background() {
   return (
     <div className="pointer-events-none fixed inset-0 overflow-hidden">
-      <div className="animate-slow-drift absolute -left-24 top-12 h-80 w-80 rounded-full bg-[#d69b5b]/30 blur-3xl" />
-      <div className="animate-slow-drift absolute right-[-8rem] top-40 h-[30rem] w-[30rem] rounded-full bg-[#6da894]/25 blur-3xl [animation-delay:2s]" />
-      <div className="absolute bottom-[-14rem] left-1/3 h-[34rem] w-[34rem] rounded-full bg-[#e8c872]/25 blur-3xl" />
+      <div className="animate-slow-drift pointer-events-none max-sm:hidden absolute -left-24 top-12 h-80 w-80 rounded-full bg-[#d69b5b]/30 blur-3xl" />
+      <div className="animate-slow-drift pointer-events-none max-sm:hidden absolute right-[-8rem] top-40 h-[30rem] w-[30rem] rounded-full bg-[#6da894]/25 blur-3xl [animation-delay:2s]" />
+      <div className="pointer-events-none max-sm:hidden absolute bottom-[-14rem] left-1/3 h-[34rem] w-[34rem] rounded-full bg-[#e8c872]/25 blur-3xl" />
     </div>
   );
 }
