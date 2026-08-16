@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { authApi, isBackendUp, setAuth } from "@/lib/backend";
+import { authApi, setAuth } from "@/lib/backend";
 import GoogleSignIn from "@/components/google-sign-in";
 
 const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? "";
@@ -465,6 +465,7 @@ function AuthModal({ mode, onClose, onSwitch }: { mode: "login" | "register"; on
   const [verifyStep, setVerifyStep] = useState(false);
   const [verifyCode, setVerifyCode] = useState("");
   const [verifyDevCode, setVerifyDevCode] = useState<string | null>(null);
+  const [verifyNote, setVerifyNote] = useState("");
 
   async function handleGoogle(credential: string) {
     setGoogleLoading(true);
@@ -485,48 +486,38 @@ function AuthModal({ mode, onClose, onSwitch }: { mode: "login" | "register"; on
     setError("");
     setLoading(true);
     try {
-      if (await isBackendUp()) {
-        if (mode === "register") {
-          const response = await authApi.register(name.trim(), email.trim(), password);
-          setVerifyStep(true);
-          if (response.dev_code) {
-            setVerifyDevCode(response.dev_code);
-            setVerifyCode(response.dev_code);
-          }
-          setError(response.message);
-          return;
+      if (mode === "register") {
+        const response = await authApi.register(name.trim(), email.trim(), password);
+        if (response.dev_code) {
+          setVerifyDevCode(response.dev_code);
+          setVerifyCode(response.dev_code);
         }
-        try {
-          const response = await authApi.login(email.trim(), password);
-          setAuth(response.access_token, response.profile);
-          window.location.href = "/app";
-        } catch (loginErr) {
-          const message = loginErr instanceof Error ? loginErr.message : "";
-          if (/verif/i.test(message)) {
-            setVerifyStep(true);
-            setError(message);
-            authApi
-              .resendVerification(email.trim())
-              .then((res) => {
-                if (res.dev_code) {
-                  setVerifyDevCode(res.dev_code);
-                  setVerifyCode(res.dev_code);
-                }
-              })
-              .catch(() => undefined);
-          } else {
-            setError(message);
-          }
-        }
+        setVerifyNote(response.message);
+        setVerifyStep(true);
         return;
       }
-      if (mode === "register" && name.trim()) {
-        window.localStorage.setItem("ai-ielts-examiner-profile", JSON.stringify({}));
-      }
+      const response = await authApi.login(email.trim(), password);
+      setAuth(response.access_token, response.profile);
       window.location.href = "/app";
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
-      setLoading(false);
+      const message = err instanceof Error ? err.message : "";
+      if (/verif/i.test(message)) {
+        setVerifyStep(true);
+        setError(message);
+        authApi
+          .resendVerification(email.trim())
+          .then((res) => {
+            if (res.dev_code) {
+              setVerifyDevCode(res.dev_code);
+              setVerifyCode(res.dev_code);
+            }
+          })
+          .catch(() => undefined);
+      } else if (err instanceof TypeError || /fetch|failed to fetch|load failed|network/i.test(message)) {
+        setError("Cannot reach the server. Make sure the backend is running on port 8000, then try again.");
+      } else {
+        setError(message || "Something went wrong. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
@@ -608,6 +599,7 @@ function AuthModal({ mode, onClose, onSwitch }: { mode: "login" | "register"; on
               We sent a 6-digit code to <span className="font-black text-[#17342f]">{email.trim()}</span>. Enter it below to activate
               your account.
             </div>
+            {verifyNote ? <p className="text-center text-xs font-semibold text-[#8b6f39]">{verifyNote}</p> : null}
             <label className="block">
               <span className="text-xs font-black uppercase tracking-[0.14em] text-[#8b6f39]">Verification code</span>
               <input
