@@ -1,0 +1,22 @@
+name: api-tests
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        working-directory: backend
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Run API regression suite
+        working-directory: backend
+        run: python -m pytest tests -q --tb=short
