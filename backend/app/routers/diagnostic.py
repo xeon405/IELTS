@@ -9,8 +9,11 @@ from ..deps import get_current_user, get_or_create_profile
 from ..schemas import DiagnosticSubmitRequest
 from ..services import diagnostic_service
 from ..services.adaptive import serialize_profile
+from ..services.ratelimit import rate_limit
 
 router = APIRouter(prefix="/diagnostic", tags=["diagnostic"])
+
+_DIAG_AI_LIMIT = rate_limit("diagnostic-ai", 120, 300)
 
 
 @router.get("/status")
@@ -29,7 +32,7 @@ def start(user: models.User = Depends(get_current_user), db: Session = Depends(g
 
 
 @router.post("/submit")
-def submit(payload: DiagnosticSubmitRequest, user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+def submit(payload: DiagnosticSubmitRequest, _: None = Depends(_DIAG_AI_LIMIT), user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     profile = get_or_create_profile(db, user)
     if profile.diagnostic_completed:
         raise HTTPException(status_code=409, detail="Diagnostic already completed")

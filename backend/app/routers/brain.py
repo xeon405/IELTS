@@ -207,7 +207,7 @@ def evaluate(payload: SessionRequest, _: None = Depends(_BRAIN_AI_LIMIT), user: 
 
 
 @router.post("/check")
-def check_answer(payload: SessionRequest, user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+def check_answer(payload: SessionRequest, _: None = Depends(_BRAIN_AI_LIMIT), user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Grade ONE answered question instantly so the frontend can show right/wrong,
     tip and suggestion before moving on. No profile changes and no DB writes.
 
