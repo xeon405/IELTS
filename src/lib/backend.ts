@@ -108,15 +108,27 @@ async function request<T>(path: string, init: RequestInit = {}, withAuth = true)
 }
 
 let _healthCache: { at: number; up: boolean } | null = null;
+let _healthInFlight: Promise<boolean> | null = null;
 const HEALTH_TTL_MS = 15_000;
 
 // Render free-tier instances sleep after ~15 min idle and take ~30-60s to
 // wake, so the health probe must not give up after a blink — otherwise every
 // feature falls back to stale local data instead of the real backend. The
 // first probe itself wakes the instance; retry across a ~70s budget.
-export async function isBackendUp(timeoutMs = 10000): Promise<boolean> {
+// Concurrent callers share one in-flight probe instead of each firing their
+// own cold-start attempt.
+export function isBackendUp(timeoutMs = 10000): Promise<boolean> {
   const now = Date.now();
-  if (_healthCache && now - _healthCache.at < HEALTH_TTL_MS) return _healthCache.up;
+  if (_healthCache && now - _healthCache.at < HEALTH_TTL_MS) return Promise.resolve(_healthCache.up);
+  if (_healthInFlight) return _healthInFlight;
+  _healthInFlight = probeHealth(timeoutMs).finally(() => {
+    _healthInFlight = null;
+  });
+  return _healthInFlight;
+}
+
+async function probeHealth(timeoutMs: number): Promise<boolean> {
+  const now = Date.now();
   const WAKE_BUDGET_MS = 70_000;
   const attempts = Math.max(1, Math.floor(WAKE_BUDGET_MS / (timeoutMs + 4_000)));
   let up = false;
