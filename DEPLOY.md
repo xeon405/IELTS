@@ -11,7 +11,7 @@ Everything needed to put **Mkg.IELTS.COM** on the internet with free accounts, a
 - Resend account (free email, 100 emails/day)
 - Google Search Console (sign in with Google)
 
-Canvas: the code is already on GitHub (`master`, commit `f893163`).
+Canvas: the code is already on GitHub (`master`, commit `b89b0b0` — security-hardened: auth/rate-limit fixes, fail-closed env, token revocation).
 
 ---
 
@@ -24,7 +24,7 @@ Canvas: the code is already on GitHub (`master`, commit `f893163`).
 
    | Name | Value |
    |---|---|
-   | `NEXT_PUBLIC_API_URL` | `https://<your-render-url>` (from Step 2 — can be filled in and redeployed later) |
+   | `NEXT_PUBLIC_API_URL` | `https://<your-render-url>` (from Step 2 — can be filled in and redeployed later) — **required**: the production build fails without it, and it must be `https://` |
    | `NEXT_PUBLIC_SITE_URL` | `https://<your-project>.vercel.app` (shown by Vercel after first deploy) |
    | `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | same value as in your local `src/.env.local` |
 
@@ -44,14 +44,14 @@ Canvas: the code is already on GitHub (`master`, commit `f893163`).
 
    | Name | Value |
    |---|---|
-   | `APP_ENV` | `production` |
+| `APP_ENV` | `production` — required: keeps OpenAPI docs/dev-code features off |
    | `FRONTEND_URL` | `https://<your-project>.vercel.app` |
    | `CORS_ORIGINS` | `https://<your-project>.vercel.app` |
-   | `JWT_SECRET` | long random string — fresh at https://randomkeygen.com or `openssl rand -hex 32` |
+   | `JWT_SECRET` | **required** — the backend refuses to start without it. Long random string, e.g. `openssl rand -hex 32` |
    | `DATABASE_URL` | from Step 3, rewritten as `postgresql+psycopg://...` |
    | `RESEND_API_KEY` | from Step 4 |
    | `RESEND_FROM` | `Mkg.IELTS <onboarding@resend.dev>` (before you add a real domain) |
-   | `AI_PROVIDER`, `GROQ_API_KEY`, `GROQ_MODEL`, `GEMINI_API_KEY` etc. | copy your working values from `backend/.env.example` / local `.env` |
+   | `AI_PROVIDER`, `GROQ_API_KEY`, `GROQ_MODEL`, `GEMINI_API_KEY` etc. | copy your working values from `backend/.env` (use the **new** Gemini key — the old one was rotated; never reuse it) |
    | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google Sign-In (optional in prod until you add the Vercel origin to the Google console) |
 
    Note: the **free** tier sleeps after ~15 minutes idle; the first request after sleep takes ~30–60s to wake up.
