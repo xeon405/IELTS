@@ -1791,7 +1791,10 @@ function BankWorkbench({
     if (!currentValue.trim() || checking || currentFeedback) return;
     setChecking(true);
     try {
-      const feedbackList = await brainApi.check(session, { [currentId]: currentValue });
+      const feedbackList = await brainApi.check(
+        { id: session.id, module: session.module, mode: session.mode },
+        { [currentId]: currentValue },
+      );
       const feedback = feedbackList.find((entry) => entry.id === currentId) ?? feedbackList[0];
       if (feedback) {
         setCheckedFeedback((prev) => ({ ...prev, [currentId]: feedback }));

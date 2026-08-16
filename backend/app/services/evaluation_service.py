@@ -7,7 +7,10 @@ answers get a Gemini band estimate when available, otherwise a transparent
 heuristic based on length, structure and vocabulary range."""
 
 import difflib
+import hashlib
 import re
+import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import Any
@@ -21,6 +24,12 @@ from . import gemini
 from . import knowledge_base as kb
 
 SKILLS = ("reading", "listening", "writing", "speaking")
+
+# Bounded cache for AI speaking spot-corrections (see _speaking_spot_teach).
+_SPEAK_TEACH_CACHE: dict[str, tuple[float, dict]] = {}
+_SPEAK_TEACH_LOCK = threading.Lock()
+_SPEAK_TEACH_TTL = 30 * 60
+_SPEAK_TEACH_MAX = 200
 
 # Exact sentence plans for the Speaking question types (mirrors the app's
 # Speaking Blueprint). The "corrected" teaching answer must follow these.
@@ -486,6 +495,27 @@ def _segments_from_diff(student_text: str, corrected_text: str) -> tuple[list[di
 
 
 def _speaking_spot_teach(item: dict, clean_answer: str) -> dict:
+    """AI spot correction for speaking answers, cached per (item, answer):
+    re-checking the same spoken answer returns instantly and identical
+    answers across users of the same item never burn AI quota. The cache is
+    bounded and short-lived so genuine re-edits still get fresh feedback."""
+    if not clean_answer.strip():
+        return _speaking_teach_empty()
+    key = hashlib.sha256(f"{item.get('id')}|{item.get('prompt') or item.get('question')}|{clean_answer.strip().lower()}".encode("utf-8")).hexdigest()
+    with _SPEAK_TEACH_LOCK:
+        entry = _SPEAK_TEACH_CACHE.get(key)
+        if entry is not None and time.monotonic() - entry[0] <= _SPEAK_TEACH_TTL:
+            return entry[1]
+    result = _speaking_spot_teach_ai(item, clean_answer)
+    with _SPEAK_TEACH_LOCK:
+        _SPEAK_TEACH_CACHE[key] = (time.monotonic(), result)
+        if len(_SPEAK_TEACH_CACHE) > _SPEAK_TEACH_MAX:
+            oldest = min(_SPEAK_TEACH_CACHE, key=lambda k: _SPEAK_TEACH_CACHE[k][0])
+            _SPEAK_TEACH_CACHE.pop(oldest, None)
+    return result
+
+
+def _speaking_spot_teach_ai(item: dict, clean_answer: str) -> dict:
     """Teach a speaking answer 'on the spot' like an official IELTS tutor:
     a corrected/refined Band-7 version of the student's OWN answer — shown even
     when the answer was already good — plus line-by-line pointers (exact

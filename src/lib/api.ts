@@ -177,7 +177,7 @@ export const brainApi = {
         ),
     );
   },
-  check(session: PracticeSession, answers: Record<string, string>): Promise<ItemFeedback[]> {
+  check(session: Pick<PracticeSession, "id" | "module" | "mode">, answers: Record<string, string>): Promise<ItemFeedback[]> {
     return brainCall(
       () => backendFetch<{ itemFeedback: ItemFeedback[] }>("/brain/check", { session, answers }).then((response) => response.itemFeedback),
       () => postJSON<{ itemFeedback: ItemFeedback[] }>("/api/brain/check", { session, answers }).then((response) => response.itemFeedback),

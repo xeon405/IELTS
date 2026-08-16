@@ -211,8 +211,10 @@ def check_answer(payload: SessionRequest, user: models.User = Depends(get_curren
     """Grade ONE answered question instantly so the frontend can show right/wrong,
     tip and suggestion before moving on. No profile changes and no DB writes.
 
-    The frontend sends the whole session plus just the answers it wants checked;
-    every answered item is returned as per-item feedback. Unanswered items are skipped.
+    The frontend sends the session id plus just the answers it wants checked;
+    items are resolved server-side from the stored AI session or the offline
+    bank pools, so the client never uploads the whole session and every id is
+    graded against authoritative data.
     """
     if not payload.session:
         raise HTTPException(status_code=400, detail="Practice session is required.")
@@ -223,15 +225,21 @@ def check_answer(payload: SessionRequest, user: models.User = Depends(get_curren
     }
     if not answered:
         raise HTTPException(status_code=400, detail="Answer the question before checking it.")
-    session_data = _session_with_answers(db, user.id, payload.session)
-    if session_data is None:
-        raise HTTPException(status_code=404, detail="This session could not be found. Submit the section for a full report instead.")
-    items = session_data.get("items") or []
+    module = str(payload.session.get("module") or "reading")
+    stored = _load_generated_items(db, user.id, module, payload.session)
+    lookup = _bank_lookup_for(module) if stored is None else None
+    resolved: dict[str, dict] = {}
+    for item_id in answered:
+        if stored is None:
+            source = lookup.get(str(item_id)) if lookup else None
+        else:
+            source = next((i for i in stored if str(i.get("id")) == str(item_id)), None)
+        if source is None:
+            raise HTTPException(status_code=404, detail="This session could not be found. Submit the section for a full report instead.")
+        resolved[str(item_id)] = source
     results = []
-    for item in items:
-        item_id = str(item.get("id"))
-        if item_id in answered:
-            results.append(ev.evaluate_item(item, answered[item_id]))
+    for item_id, value in answered.items():
+        results.append(ev.evaluate_item(resolved[item_id], value))
     if not results:
         raise HTTPException(status_code=404, detail="This session could not be found. Submit the section for a full report instead.")
     return {"itemFeedback": results}
