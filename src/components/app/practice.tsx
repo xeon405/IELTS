@@ -31,7 +31,7 @@ import {
 import { cn } from "@/lib/utils";
 import { advanceQuestionWindow, rotateFreshItems } from "@/lib/fresh-items";
 import { completionPercent, modeToBackend, moduleConfig, wordCount } from "@/lib/app-config";
-import { API_BASE, clearAuth, isBackendUp } from "@/lib/backend";
+import { API_BASE, clearAuth, getToken, isBackendUp } from "@/lib/backend";
 import { ChartCard } from "@/components/chart-card";
 import { CountdownTimer } from "@/components/countdown-timer";
 import { AudioPlayer } from "@/components/audio-player";
@@ -1798,8 +1798,12 @@ function BankWorkbench({
       } else {
         toast({ title: "No feedback returned", description: "Try the next question." });
       }
-    } catch {
-      toast({ title: "Could not check this question", description: "The AI Brain is unreachable right now — move to the next question." });
+    } catch (error) {
+      const raw = error instanceof Error ? error.message : "";
+      const message = !getToken() && /not authenticated|401/i.test(raw)
+        ? "Sign in to use the AI Brain for instant question feedback."
+        : raw || "The AI Brain is unreachable right now — move to the next question.";
+      toast({ title: "Could not check this question", description: message });
     } finally {
       setChecking(false);
     }

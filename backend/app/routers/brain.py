@@ -59,10 +59,19 @@ def _bank_lookup_for(module: str) -> dict[str, dict]:
         by_type = lb.LARGE_BY_TYPE.get(module, {})
         for mode, pool in by_type.items():
             for index, item in enumerate(pool):
-                key = str(item.get("id")) if str(item.get("id") or "") else _bank_id(module, mode, index)
                 copy = dict(item)
-                copy["id"] = key
-                lookup[key] = copy
+                # The bank endpoint stamps pool-position ids
+                # (bank-<module>-<mode slug>-<n>) before returning sessions;
+                # check/enrich lookups must resolve those stamped ids. Keep
+                # the original pool ids registered too for AI-offline sessions.
+                stamped = _bank_id(module, mode, index)
+                copy["id"] = stamped
+                lookup[stamped] = copy
+                original = str(item.get("id") or "")
+                if original and original != stamped:
+                    keep = dict(copy)
+                    keep["id"] = original
+                    lookup[original] = keep
         # Mock-exam only banks. Mock listening ids are per section
         # (s1..s4), mock reading ids per passage (p1..p3); writing and
         # speaking ids use the plain pool-position scheme.
