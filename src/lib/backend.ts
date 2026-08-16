@@ -1,6 +1,28 @@
 import type { StudentLearningProfile } from "@/lib/ielts-brain";
 
-export const BACKEND_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000").replace(/\/$/, "");
+export const IS_DEV = process.env.NODE_ENV !== "production";
+
+const rawApiUrl = (process.env.NEXT_PUBLIC_API_URL ?? "").trim().replace(/\/+$/, "");
+
+function resolveBackendUrl(): string {
+  if (!rawApiUrl) {
+    if (IS_DEV) return "http://127.0.0.1:8000";
+    throw new Error(
+      "NEXT_PUBLIC_API_URL is not set. Configure the https backend URL for the production build.",
+    );
+  }
+  if (!/^https?:\/\//.test(rawApiUrl)) {
+    throw new Error(`NEXT_PUBLIC_API_URL must start with http:// or https:// (got "${rawApiUrl}").`);
+  }
+  if (!IS_DEV && rawApiUrl.startsWith("http://")) {
+    throw new Error("NEXT_PUBLIC_API_URL must use https:// in production builds.");
+  }
+  return rawApiUrl;
+}
+
+// Fails fast (build or boot) instead of silently defaulting to an insecure
+// origin. In development the loopback fallback is kept for convenience.
+export const BACKEND_URL = resolveBackendUrl();
 export const API_BASE = `${BACKEND_URL}/api`;
 
 export const tokenKey = "ielts_access_token";

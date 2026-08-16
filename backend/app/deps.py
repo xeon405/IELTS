@@ -15,16 +15,19 @@ def get_current_user(
 ) -> models.User:
     if credentials is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-    subject = decode_access_token(credentials.credentials)
-    if subject is None:
+    payload = decode_access_token(credentials.credentials)
+    if payload is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
+    subject = payload.get("sub")
     try:
-        user_id = int(subject)
-    except ValueError:
+        user_id = int(subject) if subject is not None else -1
+    except (TypeError, ValueError):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token subject")
     user = db.get(models.User, user_id)
     if user is None or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
+    if int(payload.get("ver") or 0) != int(user.token_version or 0):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session revoked — please log in again")
     return user
 
 

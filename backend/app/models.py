@@ -36,6 +36,9 @@ class User(Base):
     email_verified: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("true"), nullable=False)
     verification_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     verification_code_expires: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    verification_attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    verification_locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    token_version: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 

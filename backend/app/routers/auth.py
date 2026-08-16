@@ -1,19 +1,20 @@
 """Authentication: register, email verification, login, forgot/reset password, current user."""
 
 import hashlib
+import hmac
 import logging
-import random
 import secrets
 import smtplib
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
 from .. import models
+from ..config import is_dev, settings
 from ..database import get_db
 from ..deps import get_current_user, get_or_create_profile
 from ..schemas import (
@@ -34,22 +35,28 @@ from ..schemas import (
 from ..security import create_access_token, hash_password, verify_password
 from ..services.adaptive import serialize_profile
 from ..services.ratelimit import rate_limit
-from ..config import settings
 
 logger = logging.getLogger("uvicorn.error")
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-VERIFY_CODE_MINUTES = 1440  # 24 hours
+VERIFY_CODE_MINUTES = 15  # codes are short-lived; resend mints a fresh one
+VERIFY_MAX_ATTEMPTS = 10  # per-account failures before a temporary lockout
+VERIFY_LOCKED_MINUTES = 15
 
 GOOGLE_JWKS_URL = "https://www.googleapis.com/oauth2/v3/certs"
 GOOGLE_ISSUERS = ("https://accounts.google.com", "accounts.google.com")
+
+# A real bcrypt hash of a random throwaway password, computed once at import.
+# Used on the login miss path so unknown emails burn the same bcrypt time as
+# real accounts (defeats the timing-based user-enumeration oracle).
+DUMMY_PASSWORD_HASH = hash_password(secrets.token_urlsafe(24))
 
 
 def _auth_payload(db: Session, user: models.User, first_login: bool) -> AuthResponse:
     profile = get_or_create_profile(db, user)
     return AuthResponse(
-        access_token=create_access_token(str(user.id)),
+        access_token=create_access_token(str(user.id), int(user.token_version or 0)),
         token_type="bearer",
         user=UserOut.model_validate(user),
         profile=serialize_profile(db, profile),
@@ -68,9 +75,9 @@ def _complete_login(db: Session, user: models.User) -> AuthResponse:
     return _auth_payload(db, user, first_login=first_login)
 
 
-def _verify_google_credential(credential: str, client_id: str | None) -> dict:
+def _verify_google_credential(credential: str) -> dict:
     """Verify a Google Identity Services ID token against Google's public keys."""
-    expected_audience = client_id or settings.GOOGLE_CLIENT_ID
+    expected_audience = settings.GOOGLE_CLIENT_ID
     if not expected_audience:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Google Sign-In is not configured on this server yet.")
     try:
@@ -109,7 +116,7 @@ def google_login(
     _: None = Depends(rate_limit("auth-google", settings.RATE_LIMIT_LOGIN_MAX, settings.RATE_LIMIT_WINDOW_SECONDS)),
 ):
     """Sign in or sign up with a Google ID token (Google Identity Services)."""
-    claims = _verify_google_credential(payload.credential, payload.client_id)
+    claims = _verify_google_credential(payload.credential)
     email = str(claims.get("email") or "").strip().lower()
     google_sub = str(claims.get("sub") or "")
     if not email:
@@ -139,11 +146,9 @@ def google_login(
 
 
 def _verification_code() -> str:
-    return f"{random.randint(0, 999999):06d}"
-
-
-def _is_prod() -> bool:
-    return (settings.APP_ENV or "development").lower() == "production"
+    # CSPRNG: codes must never come from the Mersenne Twister, whose state can
+    # be recovered from enough observed outputs.
+    return f"{secrets.randbelow(1_000_000):06d}"
 
 
 def _send_email(to_email: str, subject: str, body: str) -> bool:
@@ -177,7 +182,9 @@ def _send_email(to_email: str, subject: str, body: str) -> bool:
         except Exception as exc:  # noqa: BLE001
             logger.warning("[email] Resend API send failed: %s", exc)
     if not settings.SMTP_HOST:
-        logger.info(f"[dev] email to {to_email} ({subject}):\n{body}")
+        # Never log the message body: it carries the verification code and the
+        # password-reset link with its one-time token. Log delivery info only.
+        logger.info("[email] no delivery provider configured; message not sent to %s (subject: %s)", to_email, subject)
         return False
     try:
         message = EmailMessage()
@@ -202,44 +209,70 @@ def _email_configured() -> bool:
     return bool(settings.RESEND_API_KEY or settings.SMTP_HOST)
 
 
+def _dev_code_for(delivered: bool, code: str) -> str | None:
+    """Expose the code on screen ONLY in local development and only when the
+    email could not be delivered. Fail-closed: any other mode hides it."""
+    if delivered or not is_dev():
+        return None
+    return code
+
+
 def _issue_verification(db: Session, user: models.User) -> tuple[str, bool]:
     """Store a fresh 6-digit code and try to email it.
 
     Returns (code, delivered). ``delivered`` is True when the email provider
-    accepted the message; when False the caller may expose the code on screen
-    as a development fallback.
+    accepted the message; when False a local-developer fallback may expose the
+    code on screen (see ``_dev_code_for``).
     """
     code = _verification_code()
     user.email_verified = False
+    user.verification_attempts = 0
+    user.verification_locked_until = None
     # Store only a SHA-256 digest so a leaked database dump can't be used
     # to brute-force codes (rate limiting alone is not enough).
     user.verification_code = hashlib.sha256(code.encode("utf-8")).hexdigest()
-    user.verification_code_expires = datetime.now(timezone.utc) + timedelta(hours=24)
+    user.verification_code_expires = datetime.now(timezone.utc) + timedelta(minutes=VERIFY_CODE_MINUTES)
     db.commit()
     delivered = _send_email(
         user.email,
         "Verify your IELTS Examiner email",
-        f"Your IELTS Examiner verification code is: {code}\n\nEnter it on the login screen to activate your account. It expires in 24 hours.",
+        f"Your IELTS Examiner verification code is: {code}\n\nEnter it on the login screen to activate your account. It expires in {VERIFY_CODE_MINUTES} minutes.",
     )
     return code, (delivered or _email_configured() is False)
 
 
-def _verify_code(user: models.User, code: str) -> bool:
+def _verify_code(db: Session, user: models.User, code: str) -> bool:
+    """Constant-time digest comparison plus a per-account attempt lockout."""
+    now = datetime.now(timezone.utc)
+    locked_until = user.verification_locked_until
+    if locked_until is not None:
+        if locked_until.tzinfo is None:
+            locked_until = locked_until.replace(tzinfo=timezone.utc)
+        if locked_until > now:
+            return False
+    attempts = int(user.verification_attempts or 0)
     submitted = "".join(code.split())
     stored = user.verification_code or ""
     if not stored:
         return False
-    # Codes are stored as SHA-256 digests; compare against the digest of the
-    # submitted value (plaintext compare kept only for legacy rows).
     digest = hashlib.sha256(submitted.encode("utf-8")).hexdigest()
-    if stored.lower() != digest and stored.lower() != submitted.lower():
-        return False
+    matched = hmac.compare_digest(stored.lower(), digest) or hmac.compare_digest(stored.lower(), submitted.lower())
     expires_at = user.verification_code_expires
     if expires_at is not None:
         if expires_at.tzinfo is None:
             expires_at = expires_at.replace(tzinfo=timezone.utc)
-        return expires_at >= datetime.now(timezone.utc)
-    return True
+        matched = matched and expires_at >= now
+    if matched:
+        user.verification_attempts = 0
+        user.verification_locked_until = None
+        return True
+    attempts += 1
+    user.verification_attempts = attempts
+    if attempts >= VERIFY_MAX_ATTEMPTS:
+        user.verification_locked_until = now + timedelta(minutes=VERIFY_LOCKED_MINUTES)
+        user.verification_attempts = 0
+    db.commit()
+    return False
 
 
 @router.post("/register", response_model=RegisterResponse, status_code=status.HTTP_201_CREATED)
@@ -250,7 +283,13 @@ def register(
 ):
     existing = db.query(models.User).filter(models.User.email == payload.email.lower()).first()
     if existing:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="An account with this email already exists")
+        # Do not reveal whether the account exists (user enumeration). Return
+        # the same success shape: the account owner can use /verify/resend.
+        return RegisterResponse(
+            requires_verification=True,
+            message="Almost there. Enter the 6-digit code sent to your email to activate your account.",
+            dev_code=None,
+        )
     user = models.User(
         email=payload.email.lower(),
         full_name=payload.full_name.strip(),
@@ -268,7 +307,7 @@ def register(
         message="Almost there. Enter the 6-digit code sent to your email to activate your account."
         if delivered
         else "Couldn't reach your inbox yet — try the resend button in a moment.",
-        dev_code=None if (delivered or _is_prod()) else code,
+        dev_code=_dev_code_for(delivered, code),
     )
 
 
@@ -279,16 +318,19 @@ def verify(
     _: None = Depends(rate_limit("auth-verify", settings.RATE_LIMIT_VERIFY_MAX, settings.RATE_LIMIT_WINDOW_SECONDS)),
 ):
     user = db.query(models.User).filter(models.User.email == payload.email.lower()).first()
+    # No account, wrong code and locked-out accounts all produce the same
+    # generic error so the endpoint cannot be used to enumerate users.
     if user is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No account found for that email")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired verification code")
     if user.email_verified:
-        profile = get_or_create_profile(db, user)
-        return _auth_payload(db, user, first_login=not profile.first_login_redirected)
-    if not _verify_code(user, payload.code):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This email is already verified — log in to continue.")
+    if not _verify_code(db, user, payload.code):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired verification code")
     user.email_verified = True
     user.verification_code = None
     user.verification_code_expires = None
+    user.verification_attempts = 0
+    user.verification_locked_until = None
     db.commit()
     profile = get_or_create_profile(db, user)
     first_login = not profile.first_login_redirected
@@ -314,7 +356,7 @@ def resend_verification(
         message="A new 6-digit verification code has been sent."
         if delivered
         else "Couldn't reach your inbox yet — try again in a moment.",
-        dev_code=None if (delivered or _is_prod()) else code,
+        dev_code=_dev_code_for(delivered, code),
     )
 
 
@@ -325,7 +367,12 @@ def login(
     _: None = Depends(rate_limit("auth-login", settings.RATE_LIMIT_LOGIN_MAX, settings.RATE_LIMIT_WINDOW_SECONDS)),
 ):
     user = db.query(models.User).filter(models.User.email == payload.email.lower()).first()
-    if user is None or not verify_password(payload.password, user.hashed_password):
+    if user is None:
+        # Burn bcrypt time anyway: unknown-email responses must match the
+        # latency of a real password check.
+        verify_password(payload.password, DUMMY_PASSWORD_HASH)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password")
+    if not verify_password(payload.password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password")
     if not user.email_verified:
         raise HTTPException(
@@ -359,7 +406,7 @@ def forgot_password(
     ))
     db.commit()
     frontend = (settings.FRONTEND_URL or "http://localhost:4000").rstrip("/")
-    reset_link = f"{frontend}/forgot-password?token={token}&email={user.email}"
+    reset_link = f"{frontend}/forgot-password#token={token}&email={user.email}"
     _send_email(
         user.email,
         "Reset your IELTS Examiner password",
@@ -368,9 +415,9 @@ def forgot_password(
         "If you did not ask for a reset, you can safely ignore this email.",
     )
     message = f"Use this one-time code to reset your password: {token}"
-    if _is_prod():
+    if not is_dev():
         message = "If that email is registered, a reset link has been sent."
-    return ForgotResponse(message=message, reset_token=None if _is_prod() else token)
+    return ForgotResponse(message=message, reset_token=token if is_dev() else None)
 
 
 @router.post("/reset-password", response_model=ResetResponse)
@@ -392,6 +439,16 @@ def reset_password(
     if user is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired reset token")
     user.hashed_password = hash_password(payload.password)
+    # Invalidate every JWT ever issued to this account (stolen tokens die here).
+    user.token_version = int(user.token_version or 0) + 1
     row.used = True
     db.commit()
     return ResetResponse()
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+def logout(user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Revoke all of this user's tokens by bumping their token version."""
+    user.token_version = int(user.token_version or 0) + 1
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

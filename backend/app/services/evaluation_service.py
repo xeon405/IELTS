@@ -959,11 +959,17 @@ def evaluate_session(db: Session, user: models.User, profile: models.StudentProf
         result["textAnalysis"] = skill_results[0]["feedback"]["textAnalysis"]
 
     total_seconds = (timing or {}).get("totalSeconds") if timing else None
+    mode = str(session_data.get("mode") or "Quick Practice")
+    default_minutes = kb.mode_duration(module, mode)
     try:
-        duration_minutes = int(session_data.get("durationMinutes") or 0) or kb.mode_duration(module, str(session_data.get("mode") or "Quick Practice"))
+        claimed = int(session_data.get("durationMinutes") or 0) or default_minutes
+        # The client never decides how long a session "counts": clamp its
+        # claim to the official mode duration (and never below 5 minutes) so
+        # completed-hours and speed metrics can't be inflated.
+        duration_minutes = max(5, min(claimed, max(default_minutes * 2, 30)))
         total_seconds_i = int(total_seconds) if total_seconds is not None else None
     except (TypeError, ValueError):
-        duration_minutes = kb.mode_duration(module, str(session_data.get("mode") or "Quick Practice"))
+        duration_minutes = default_minutes
         total_seconds_i = None
     metrics = compute_timing_metrics(
         module,
@@ -1025,7 +1031,11 @@ def _persist_session(db: Session, user: models.User, profile: models.StudentProf
     ))
 
     profile.last_activity_at = now
-    profile.completed_hours = float(profile.completed_hours or 0) + float(session_data.get("durationMinutes") or 5) / 60
+    try:
+        claimed = int(session_data.get("durationMinutes") or 5) or 5
+    except (TypeError, ValueError):
+        claimed = 5
+    profile.completed_hours = float(profile.completed_hours or 0) + min(max(claimed, 5), 120) / 60
     profile.confidence = round(max(0.0, min(100.0, float(profile.confidence or 50) + (band - 5.5) * 3)), 1)
     if module == "speaking":
         profile.fluency = round(max(0.0, min(100.0, float(profile.fluency or 50) + (band - 5.5) * 3)), 1)

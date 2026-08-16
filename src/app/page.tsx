@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { authApi, setAuth } from "@/lib/backend";
+import { authApi, setAuth, IS_DEV } from "@/lib/backend";
 import GoogleSignIn from "@/components/google-sign-in";
 
 const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? "";
@@ -488,7 +488,7 @@ function AuthModal({ mode, onClose, onSwitch }: { mode: "login" | "register"; on
     try {
       if (mode === "register") {
         const response = await authApi.register(name.trim(), email.trim(), password);
-        if (response.dev_code) {
+        if (IS_DEV && response.dev_code) {
           setVerifyDevCode(response.dev_code);
           setVerifyCode(response.dev_code);
         }
@@ -507,7 +507,7 @@ function AuthModal({ mode, onClose, onSwitch }: { mode: "login" | "register"; on
         authApi
           .resendVerification(email.trim())
           .then((res) => {
-            if (res.dev_code) {
+            if (IS_DEV && res.dev_code) {
               setVerifyDevCode(res.dev_code);
               setVerifyCode(res.dev_code);
             }
@@ -543,7 +543,7 @@ function AuthModal({ mode, onClose, onSwitch }: { mode: "login" | "register"; on
     setLoading(true);
     try {
       const result = await authApi.resendVerification(email.trim());
-      if (result.dev_code) {
+      if (IS_DEV && result.dev_code) {
         setVerifyDevCode(result.dev_code);
         setVerifyCode(result.dev_code);
       }
@@ -610,7 +610,7 @@ function AuthModal({ mode, onClose, onSwitch }: { mode: "login" | "register"; on
                 className="mt-2 w-full rounded-2xl border border-[#d8c8a8] bg-[#fffdf7] px-4 py-3 text-center font-mono text-2xl tracking-[0.5em] text-[#17342f] outline-none transition focus:border-[#17342f] focus:ring-4 focus:ring-[#17342f]/10"
               />
             </label>
-            {verifyDevCode ? (
+            {IS_DEV && verifyDevCode ? (
               <p className="text-center text-xs font-bold text-[#8b6f39]">
                 Demo code: <span className="font-mono text-sm">{verifyDevCode}</span> (no email is configured — shown for testing)
               </p>

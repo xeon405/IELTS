@@ -27,7 +27,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const devCode = reg.data.dev_code;
 
   const dup = await req("POST", "/auth/register", { full_name: "Dup", email, password: pwd }, "");
-  check("duplicate register -> 409", dup.status === 409, dup.data?.detail);
+  check("duplicate register not enumerable (generic 201, no dev_code)", dup.status === 201 && dup.data.requires_verification === true && dup.data.dev_code == null, JSON.stringify(dup.data));
 
   const wrongEmail = await req("POST", "/auth/login", { email: `nobody_${stamp}@example.com`, password: pwd }, "");
   check("login unknown email -> 401", wrongEmail.status === 401);
@@ -44,6 +44,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const verify = await req("POST", "/auth/verify", { email, code: devCode }, "");
   check("verify correct code -> logged in (token)", verify.status === 200 && !!verify.data.access_token && !!verify.data.profile, "");
   token = verify.data.access_token;
+
+  const takeover = await req("POST", "/auth/verify", { email, code: "999999" }, "");
+  check("account takeover blocked: verify on verified account issues NO token", takeover.status === 400 && !takeover.data?.access_token, `status=${takeover.status}`);
 
   const resend = await req("POST", "/auth/verify/resend", { email }, "");
   check("resend on verified account reports already verified", resend.status === 200 && resend.data.dev_code == null, resend.data?.message);
@@ -73,12 +76,19 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const sess = await req("POST", "/brain/session", { session: { module: "listening", mode: "Question by Question", questionCount: 5 } }, token);
   check("session generation works", sess.status === 200 && Array.isArray(sess.data.session?.items) && sess.data.session.items.length >= 1, `${sess.data.session?.items?.length} items`);
 
+  const evalSession = {
+    id: String(sess.data.session?.id ?? ""),
+    module: "listening",
+    mode: "Question by Question",
+    questionCount: 5,
+    items: sess.data.session?.items ?? [],
+  };
   const evalAnswers = {};
-  if (Array.isArray(sess.data.session?.items)) {
-    for (const i of sess.data.session.items.slice(0, 3)) evalAnswers[i.id] = String(i.correctAnswer ?? "A");
-  }
-  const ev = await req("POST", "/brain/evaluate", { profile: {}, session: { id: sessionId ? String(sessionId) : undefined, module: "listening", mode: "Question by Question", items: sess.data.session?.items }, answers: evalAnswers, timing: { totalSeconds: 90 } }, token);
+  for (const i of evalSession.items.slice(0, 3)) evalAnswers[i.id] = String(i.correctAnswer ?? "A");
+  const ev = await req("POST", "/brain/evaluate", { profile: {}, session: evalSession, answers: evalAnswers, timing: { totalSeconds: 90 } }, token);
   check("evaluate works", ev.status === 200 && ev.data.evaluation && ev.data.updatedProfile, `band=${ev.data.evaluation?.predictedBand}`);
+  const forged = await req("POST", "/brain/evaluate", { profile: {}, session: { id: "reading-groq-forged", module: "reading", mode: "Question by Question", items: [{ id: "never-a-real-id", prompt: "x", correctAnswer: "A" }] }, answers: { "never-a-real-id": "A" }, timing: {} }, token);
+  check("forged session rejected (404)", forged.status === 404, `status=${forged.status}`);
 
   const mock = await req("POST", "/brain/mock", { profile: {}, answers: {}, timing: {} }, token);
   check("mock (4-section) works", mock.status === 200 && mock.data.result && mock.data.result.overallBand !== undefined, `overall=${mock.data.result?.overallBand}`);

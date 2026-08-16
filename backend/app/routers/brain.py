@@ -45,11 +45,14 @@ def _bank_id(module: str, mode: str, index: int) -> str:
 
 
 def _bank_lookup_for(module: str) -> dict[str, dict]:
-    """id -> item map for a module's offline large bank (cached in-process).
+    """id -> item map for a module's offline banks (cached in-process).
 
-    Ids are pool-position based (per question type), which is exactly how the
-    bank endpoint stamps them, so a stripped bank session can always be
-    re-enriched with the correct answers server-side.
+    Covers the practice large bank (portal sessions) AND the dedicated mock
+    bank (mock-exam items), since mock papers strip answers before sending.
+    Ids are pool-position based (per question type and, for mock items, per
+    exam section/passage slot), which is exactly how the bank/mock endpoints
+    stamp them, so a stripped session can always be re-enriched with the
+    correct answers server-side. Every id resolves to the exact item.
     """
     if module not in _BANK_LOOKUP:
         lookup: dict[str, dict] = {}
@@ -60,6 +63,25 @@ def _bank_lookup_for(module: str) -> dict[str, dict]:
                 copy = dict(item)
                 copy["id"] = key
                 lookup[key] = copy
+        # Mock-exam only banks. Mock listening ids are per section
+        # (s1..s4), mock reading ids per passage (p1..p3); writing and
+        # speaking ids use the plain pool-position scheme.
+        from ..services.large_bank_mock import MOCK_LARGE_BY_TYPE
+        mock_by_type = MOCK_LARGE_BY_TYPE.get(module, {})
+        for label, pool in mock_by_type.items():
+            slug_label = _slug(label)
+            for index, item in enumerate(pool):
+                base = f"mock-{module}-{slug_label}-{index + 1}"
+                copy = dict(item)
+                copy["id"] = base
+                if module == "listening":
+                    for section in range(1, 5):
+                        lookup[f"mock-listening-{slug_label}-s{section}-{index + 1}"] = copy
+                elif module == "reading":
+                    for passage in range(1, 4):
+                        lookup[f"mock-reading-{slug_label}-p{passage}-{index + 1}"] = copy
+                else:
+                    lookup[base] = copy
         _BANK_LOOKUP[module] = lookup
     return _BANK_LOOKUP[module]
 
@@ -91,31 +113,41 @@ def _load_generated_items(db: Session, user_id: int, module: str, session: dict 
     return None
 
 
-def _session_with_answers(db: Session, user_id: int, session: dict | None) -> dict:
+def _session_with_answers(db: Session, user_id: int, session: dict | None) -> dict | None:
     """Session with originals (correct answers hidden from the browser restored).
 
-    Prefers the persisted AI session, then the offline large bank (which keeps
-    the correct answer server-side), then the raw session the client sent.
+    Strict resolution - returns None when the session cannot be accounted
+    for server-side:
+      * the persisted AI session row owned by THIS user, or
+      * every item id resolvable in the offline practice/mock banks.
+
+    The client-supplied item bodies are NEVER used as grading truth, so a
+    fabricated session (attacker-chosen correctAnswer) can no longer inflate
+    band scores or reports.
     """
     if not session:
-        return {}
+        return None
     module = str(session.get("module") or "reading")
     stored = _load_generated_items(db, user_id, module, session)
     if stored is not None:
         safe = dict(session)
         safe["items"] = stored
         return safe
-    # Bank session: enrich stripped items with correct answers from the bank.
+    # Bank/mock session: enrich stripped items with correct answers from the
+    # authoritative server-side pools. Every id must resolve.
     lookup = _bank_lookup_for(module)
-    if lookup and any(str(item.get("id")) in lookup for item in (session.get("items") or [])):
-        enriched: list[dict] = []
-        for item in session.get("items") or []:
-            bank_item = lookup.get(str(item.get("id")))
-            enriched.append(dict(bank_item) if bank_item else item)
-        safe = dict(session)
-        safe["items"] = enriched
-        return safe
-    return dict(session)
+    items = session.get("items") or []
+    if not items:
+        return None
+    enriched: list[dict] = []
+    for item in items:
+        source = lookup.get(str(item.get("id") or ""))
+        if source is None:
+            return None
+        enriched.append(dict(source))
+    safe = dict(session)
+    safe["items"] = enriched
+    return safe
 
 
 @router.post("/recommend")
@@ -157,6 +189,8 @@ def evaluate(payload: SessionRequest, _: None = Depends(_BRAIN_AI_LIMIT), user: 
     if not payload.session:
         raise HTTPException(status_code=400, detail="Practice session is required.")
     session_data = _session_with_answers(db, user.id, payload.session)
+    if session_data is None:
+        raise HTTPException(status_code=404, detail="This session could not be found. Submit the section for a full report instead.")
     result = ev.evaluate_session(db, user, profile, session_data, payload.answers, timing=payload.timing)
     adaptive.recompute_profile(db, profile)
     updated = _profile_dict(db, user, profile)
@@ -181,6 +215,8 @@ def check_answer(payload: SessionRequest, user: models.User = Depends(get_curren
     if not answered:
         raise HTTPException(status_code=400, detail="Answer the question before checking it.")
     session_data = _session_with_answers(db, user.id, payload.session)
+    if session_data is None:
+        raise HTTPException(status_code=404, detail="This session could not be found. Submit the section for a full report instead.")
     items = session_data.get("items") or []
     results = []
     for item in items:
@@ -734,11 +770,13 @@ def update_settings(payload: SettingsUpdate, user: models.User = Depends(get_cur
 
 @router.get("/health")
 def health():
-    return {
-        "status": "ok",
-        "app": settings.APP_NAME,
-        "gemini": gemini.is_gemini_available(),
-        "ai_provider": gemini.active_provider(),
-        "ai_available": gemini.is_ai_available(),
-        "database": active_dialect(),
-    }
+    from ..config import is_dev
+    payload: dict = {"status": "ok", "app": settings.APP_NAME}
+    if is_dev():
+        # Provider/dialect details are dev-only intelligence; production gets
+        # a lean probe so scanners can't fingerprint the stack.
+        payload["gemini"] = gemini.is_gemini_available()
+        payload["ai_provider"] = gemini.active_provider()
+        payload["ai_available"] = gemini.is_ai_available()
+        payload["database"] = active_dialect()
+    return payload

@@ -171,6 +171,13 @@ export function VoiceRecorder({ onTranscript }: { onTranscript?: (text: string) 
     setError(null);
     setTranscribing(true);
     try {
+      // Keep payloads well under the backend's 50MB body cap (base64 inflates
+      // by ~33%): reject oversized recordings before uploading.
+      const MAX_RECORDING_BYTES = 30 * 1024 * 1024;
+      if (blob.size > MAX_RECORDING_BYTES) {
+        setError("This recording is too large to transcribe — please record a shorter answer or type it instead.");
+        return;
+      }
       const audible = await blobHasSpeech(blob);
       if (!audible) {
         setError("No speech was detected in the recording — your microphone may be muted or off. Check your mic and try again, or type your answer.");

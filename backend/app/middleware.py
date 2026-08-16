@@ -19,12 +19,20 @@ MAX_BODY_BYTES = 50 * 1024 * 1024
 
 
 class BodySizeLimitMiddleware(BaseHTTPMiddleware):
-    """Reject oversized request bodies before the app buffers them."""
+    """Reject oversized request bodies before the app buffers them.
+
+    Content-Length is authoritative for JSON bodies; requests without it
+    (e.g. chunked transfer-encoding) are rejected outright so the 50 MB
+    ceiling cannot be bypassed with an unbounded stream.
+    """
 
     async def dispatch(self, request: Request, call_next):
         content_length = request.headers.get("content-length")
-        if content_length and content_length.isdigit() and int(content_length) > MAX_BODY_BYTES:
-            return JSONResponse(status_code=413, content={"detail": "Request body too large."})
+        if request.method in ("POST", "PUT", "PATCH"):
+            if content_length is None:
+                return JSONResponse(status_code=411, content={"detail": "A Content-Length header is required."})
+            if content_length.isdigit() and int(content_length) > MAX_BODY_BYTES:
+                return JSONResponse(status_code=413, content={"detail": "Request body too large."})
         return await call_next(request)
 
 

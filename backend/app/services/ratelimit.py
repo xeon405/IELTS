@@ -9,6 +9,8 @@ import time
 
 from fastapi import HTTPException, Request, status
 
+from ..config import settings
+
 _WINDOW_SECONDS = 300
 _MAX_PER_WINDOW = 30
 _COUNTERS: dict[tuple[str, str], tuple[float, int]] = {}
@@ -16,12 +18,17 @@ _LOCK = threading.Lock()
 
 
 def _client_key(request: Request) -> str:
-    # Behind a reverse proxy (Render, Nginx, etc.) the client's real IP is only
-    # visible via X-Forwarded-For (added by the proxy). Trust its first value so
-    # users behind the proxy don't all collapse into one rate-limit bucket.
+    # Rate-limit identity must come from a place the CLIENT cannot forge.
+    # X-Forwarded-For's FIRST entry is client-controlled (spoofable); only a
+    # trusted proxy's appended LAST entry reflects the real peer. In
+    # production the app sits behind Render's proxy, which appends the real
+    # client IP; in local development there is no proxy, so use the socket
+    # peer address directly.
     forwarded = request.headers.get("x-forwarded-for")
     if forwarded:
-        return forwarded.split(",")[0].strip()
+        parts = [part.strip() for part in forwarded.split(",") if part.strip()]
+        if parts and settings.APP_ENV == "production":
+            return parts[-1]
     if request.client and request.client.host:
         return request.client.host
     return "unknown"

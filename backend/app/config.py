@@ -18,9 +18,11 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = "postgresql+psycopg://ielts:ielts_secret@localhost:5432/ielts"
 
-    JWT_SECRET: str = "change-me-in-production"
+    # Empty by default: the app refuses to start until a real secret is set.
+    # A hardcoded default would let a misconfigured deployment forge JWTs.
+    JWT_SECRET: str = ""
     JWT_ALGORITHM: str = "HS256"
-    JWT_EXPIRES_MINUTES: int = 60 * 24 * 7
+    JWT_EXPIRES_MINUTES: int = 60 * 24
 
     FRONTEND_URL: str = "http://localhost:4000"
 
@@ -64,6 +66,13 @@ class Settings(BaseSettings):
     # Resend (transactional email API) — used first when set, SMTP is the fallback.
     RESEND_API_KEY: str = ""
     RESEND_FROM: str = "IELTS Examiner <onboarding@resend.dev>"
+
+
+def is_dev() -> bool:
+    """Fail-closed environment gate: ONLY an explicit ``development`` value
+    enables dev conveniences (on-screen codes, reset tokens, /docs, HSTS off).
+    Any other or missing value behaves like production."""
+    return (settings.APP_ENV or "").lower() == "development"
 
 
 @lru_cache

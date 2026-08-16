@@ -3,11 +3,15 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
+# bcrypt only reads the first 72 bytes of a password; longer inputs silently
+# collapse into the same hash, so the API caps passwords at 72 bytes.
+_MAX_PASSWORD_BYTES = 72
+
 
 class RegisterRequest(BaseModel):
     email: EmailStr
     full_name: str = Field(min_length=1, max_length=255)
-    password: str = Field(min_length=8, max_length=128)
+    password: str = Field(min_length=8, max_length=_MAX_PASSWORD_BYTES)
 
 
 class LoginRequest(BaseModel):
@@ -16,10 +20,13 @@ class LoginRequest(BaseModel):
 
 
 class GoogleLoginRequest(BaseModel):
-    """A Google Identity Services credential (encoded JWT ID token)."""
+    """A Google Identity Services credential (encoded JWT ID token).
+
+    The audience is pinned server-side to settings.GOOGLE_CLIENT_ID; a
+    client-supplied client_id is intentionally NOT accepted.
+    """
 
     credential: str = Field(min_length=20)
-    client_id: str | None = None
 
 
 class ForgotPasswordRequest(BaseModel):
@@ -28,7 +35,7 @@ class ForgotPasswordRequest(BaseModel):
 
 class ResetPasswordRequest(BaseModel):
     token: str
-    password: str = Field(min_length=8, max_length=128)
+    password: str = Field(min_length=8, max_length=_MAX_PASSWORD_BYTES)
 
 
 class TokenResponse(BaseModel):

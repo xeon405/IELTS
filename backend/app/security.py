@@ -17,15 +17,16 @@ def verify_password(password: str, hashed: str) -> bool:
         return False
 
 
-def create_access_token(subject: str) -> str:
-    expires = datetime.now(timezone.utc) + timedelta(minutes=settings.JWT_EXPIRES_MINUTES)
-    payload = {"sub": subject, "exp": expires}
+def create_access_token(subject: str, token_version: int = 0) -> str:
+    now = datetime.now(timezone.utc)
+    expires = now + timedelta(minutes=settings.JWT_EXPIRES_MINUTES)
+    payload = {"sub": subject, "iat": now, "exp": expires, "ver": token_version}
     return jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
 
 
-def decode_access_token(token: str) -> str | None:
+def decode_access_token(token: str) -> dict | None:
+    """Return the verified payload (sub, iat, ver, exp) or None."""
     try:
-        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
-        return payload.get("sub")
+        return jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
     except JWTError:
         return None

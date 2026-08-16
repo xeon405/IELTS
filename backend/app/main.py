@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from .config import settings
+from .config import is_dev, settings
 from .database import Base, engine, active_dialect
 from .middleware import BodySizeLimitMiddleware, RequestContextMiddleware
 from .routers import auth, brain, diagnostic
@@ -40,9 +40,12 @@ async def _db_keepalive(stop: asyncio.Event):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    if settings.APP_ENV == "production" and settings.JWT_SECRET in ("", "change-me-in-production"):
+    # Always refuse to run with an empty or default signing secret. A hardcoded
+    # default JWT secret lets ANYONE forge tokens — there is no valid reason to
+    # boot without one, even in development.
+    if not settings.JWT_SECRET or settings.JWT_SECRET in ("", "change-me-in-production", "dev"):
         raise RuntimeError(
-            "Refusing to start in production: JWT_SECRET must be set to a long random value."
+            "Refusing to start: JWT_SECRET must be set to a long random value (HINT: openssl rand -hex 32)."
         )
     Base.metadata.create_all(bind=engine)
     inspector = sqlalchemy.inspect(engine)
@@ -65,6 +68,12 @@ async def lifespan(app: FastAPI):
             alterations.append("ALTER COLUMN verification_code TYPE VARCHAR(64)")
         if "google_sub" not in columns:
             alterations.append("ADD COLUMN google_sub VARCHAR(255)")
+        if "verification_attempts" not in columns:
+            alterations.append("ADD COLUMN verification_attempts INTEGER NOT NULL DEFAULT 0")
+        if "verification_locked_until" not in columns:
+            alterations.append(f"ADD COLUMN verification_locked_until {ts}")
+        if "token_version" not in columns:
+            alterations.append("ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0")
         if alterations:
             with engine.begin() as conn:
                 for clause in alterations:
@@ -80,12 +89,15 @@ async def lifespan(app: FastAPI):
     logger.info("shutdown complete")
 
 
+dev_enabled = is_dev()
+
 app = FastAPI(
     title=settings.APP_NAME,
     version="1.0.0",
     lifespan=lifespan,
-    docs_url="/docs" if settings.APP_ENV != "production" else None,
-    redoc_url=None if settings.APP_ENV == "production" else None,
+    docs_url="/docs" if dev_enabled else None,
+    redoc_url="/redoc" if dev_enabled else None,
+    openapi_url="/openapi.json" if dev_enabled else None,
 )
 
 app.add_middleware(BodySizeLimitMiddleware)
@@ -131,9 +143,15 @@ app.include_router(diagnostic.router, prefix=settings.API_PREFIX)
 
 @app.get("/")
 def root():
-    return {"app": settings.APP_NAME, "docs": "/docs", "health": "/api/brain/health"}
+    payload: dict = {"app": settings.APP_NAME, "health": "/api/brain/health"}
+    if dev_enabled:
+        payload["docs"] = "/docs"
+    return payload
 
 
 @app.get("/health")
 def health():
+    # Lean in production: no database dialect or stack hints for scanners.
+    if not dev_enabled:
+        return {"status": "ok"}
     return {"status": "ok", "database": active_dialect()}

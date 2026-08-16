@@ -1,9 +1,9 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import AuthShell from "@/components/auth-shell";
-import { authApi } from "@/lib/backend";
+import { authApi, IS_DEV } from "@/lib/backend";
 
 export default function ForgotPasswordPage() {
   return (
@@ -15,7 +15,6 @@ export default function ForgotPasswordPage() {
 
 function ForgotPasswordForm() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [token, setToken] = useState("");
   const [password, setPassword] = useState("");
@@ -26,14 +25,18 @@ function ForgotPasswordForm() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const tokenParam = searchParams.get("token");
-    const emailParam = searchParams.get("email");
+    // The reset code travels in the URL fragment (#token=...&email=...), never
+    // in the query string, so it is not logged by web analytics or left in the
+    // Referer header.
+    const params = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    const tokenParam = params.get("token");
+    const emailParam = params.get("email");
     if (tokenParam) {
       setToken(tokenParam);
       if (emailParam) setEmail(emailParam);
       setStep("reset");
     }
-  }, [searchParams]);
+  }, []);
 
   const handleRequest = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,7 +48,7 @@ function ForgotPasswordForm() {
     setLoading(true);
     try {
       const result = await authApi.forgotPassword(email.trim());
-      if (result.reset_token) setDevToken(result.reset_token);
+      if (IS_DEV && result.reset_token) setDevToken(result.reset_token);
       setStep("reset");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not request a reset. Please try again.");
@@ -108,7 +111,7 @@ function ForgotPasswordForm() {
           </>
         ) : (
           <>
-            {devToken ? (
+            {IS_DEV && devToken ? (
               <div className="rounded-2xl border border-[#e3dac6] bg-[#f5eddc] px-4 py-3">
                 <p className="text-xs font-black uppercase tracking-[0.14em] text-[#8b6f39]">Development preview</p>
                 <p className="mt-1 break-all font-mono text-sm font-black text-[#17342f]">{devToken}</p>

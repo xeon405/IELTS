@@ -4,7 +4,8 @@ services:
     container_name: ielts_db
     environment:
       POSTGRES_USER: ielts
-      POSTGRES_PASSWORD: ielts_secret
+      # Dev-only password; override via POSTGRES_PASSWORD env for anything shared.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ielts_dev_only_change_me}
       POSTGRES_DB: ielts
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -22,7 +23,7 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      DATABASE_URL: postgresql+psycopg://ielts:ielts_secret@db:5432/ielts
+      DATABASE_URL: postgresql+psycopg://ielts:${POSTGRES_PASSWORD:-ielts_dev_only_change_me}@db:5432/ielts
       CORS_ORIGINS: http://localhost:4000,http://localhost:3000
       FRONTEND_URL: http://localhost:4000
     ports:

@@ -75,32 +75,36 @@ def _slug(value: str) -> str:
     return "".join(c if c.isalnum() else "-" for c in value.lower()).strip("-") or "type"
 
 
-def _stamp(item: Item, module: str, lane_label: str, lane_index: int) -> Item:
-    """Deterministic bank id = pool position, exactly like /brain/bank."""
-    item["id"] = f"bank-{module}-{_slug(lane_label)}-{lane_index + 1}"
+def _stamp(item: Item, module: str, lane_label: str, lane_index: int, prefix: str = "bank") -> Item:
+    """Deterministic id = pool position, exactly like /brain/bank.
+
+    ``prefix`` lets mock-exam items carry a ``mock-`` namespace so practice
+    and mock banks can never collide id-space.
+    """
+    item["id"] = f"{prefix}-{module}-{_slug(lane_label)}-{lane_index + 1}"
     return item
 
 
-def _rotated(pool: list[Item], offset: int) -> list[Item]:
+def _rotated(pool: list, offset: int) -> list:
     if not pool:
         return []
     offset %= len(pool)
-    return pool[offset:] + pool[: offset]
+    return pool[offset:] + pool[:offset]
 
 
-def _lanes(module: str, labels: list[str], by_type: dict | None = None) -> dict[str, list[Item]]:
+def _lanes(module: str, labels: list[str], by_type: dict | None = None, prefix: str = "bank") -> dict[str, list[Item]]:
     """id-stamped copies of each requested type lane (official labels resolved).
 
     ``by_type`` defaults to the practice large banks; mock exams pass
     ``MOCK_LARGE_BY_TYPE`` so their questions never come from the portal's
-    practice pools.
+    practice pools. ``prefix`` namespaces the ids (``bank`` vs ``mock``).
     """
     by_type = by_type or large_bank.LARGE_BY_TYPE
     lanes: dict[str, list[Item]] = {}
     for label in labels:
         resolved = _OFFICIAL_SPEAKING_LABELS.get(label, label) if module == "speaking" else label
         raw = by_type.get(module, {}).get(resolved, [])
-        lanes[label] = [_stamp(dict(item), module, resolved, index) for index, item in enumerate(raw)]
+        lanes[label] = [_stamp(dict(item), module, resolved, index, prefix) for index, item in enumerate(raw)]
     return lanes
 
 
@@ -133,21 +137,20 @@ LISTENING_SECTION_PLAN: list[tuple[str, list[tuple[str, int]]]] = [
 
 def _listening(paper_no: int) -> list[Item]:
     items: list[Item] = []
-    counters: dict[str, int] = {}
     for section_index, (section_label, plan) in enumerate(LISTENING_SECTION_PLAN):
         if section_index > 0:
             plan = list(plan)
             random.shuffle(plan)
-        for lane_pos, (label, count) in enumerate(plan):
-            slug = _slug(label)
-            lane = _lanes("listening", [label], MOCK_LARGE_BY_TYPE)[label]
+        for label, count in plan:
+            lane = _lanes("listening", [label], MOCK_LARGE_BY_TYPE, prefix="mock")[label]
             if not lane:
                 continue
-            pool = _rotated(lane, random.randrange(len(lane)))[:count]
-            for item in pool:
-                k = counters.get(slug, 0) + 1
-                counters[slug] = k
-                item["id"] = f"bank-listening-{slug}-{k}"
+            # (absolute pool position, item) pairs survive rotation so ids stay
+            # pool-position based and re-enrichable server-side.
+            pairs = list(enumerate(lane))
+            pool = _rotated(pairs, random.randrange(len(pairs)))[:count]
+            for abs_index, item in pool:
+                item["id"] = f"mock-listening-{_slug(label)}-s{section_index + 1}-{abs_index + 1}"
                 item["examSection"] = section_label
                 item["sectionLabel"] = section_label
                 items.append(item)
@@ -156,10 +159,13 @@ def _listening(paper_no: int) -> list[Item]:
 
 def _reading(paper_no: int) -> list[Item]:
     labels = [k for k in MOCK_LARGE_BY_TYPE.get("reading", {})]
-    lanes = {label: list(_rotated(pool, random.randrange(len(pool)) if pool else 0)) for label, pool in _lanes("reading", labels, MOCK_LARGE_BY_TYPE).items()}
+    lanes: dict[str, list] = {}
+    for label in labels:
+        lane = _lanes("reading", [label], MOCK_LARGE_BY_TYPE, prefix="mock")[label]
+        pairs = list(enumerate(lane))
+        lanes[label] = _rotated(pairs, random.randrange(len(pairs)) if pairs else 0)
     sizes = [13, 13, 14]
     items: list[Item] = []
-    counters: dict[str, int] = {}
     for group, size in enumerate(sizes):
         available = [label for label in labels if lanes[label]]
         if not available:
@@ -179,11 +185,8 @@ def _reading(paper_no: int) -> list[Item]:
             for _ in range(part_size):
                 if not pool:
                     break
-                item = pool.pop(0)
-                slug = _slug(label)
-                k = counters.get(slug, 0) + 1
-                counters[slug] = k
-                item["id"] = f"bank-reading-{slug}-{k}"
+                abs_index, item = pool.pop(0)
+                item["id"] = f"mock-reading-{_slug(label)}-p{group + 1}-{abs_index + 1}"
                 item["examSection"] = f"Passage {group + 1}"
                 item["sectionLabel"] = f"Passage {group + 1}"
                 items.append(item)
@@ -193,8 +196,8 @@ def _reading(paper_no: int) -> list[Item]:
 def _writing(paper_no: int) -> list[Item]:
     t1_labels = [k for k in MOCK_LARGE_BY_TYPE["writing"] if k.startswith("Task 1")]
     t2_labels = [k for k in MOCK_LARGE_BY_TYPE["writing"] if k.startswith("Task 2")]
-    t1_lanes = {label: list(_rotated(pool, random.randrange(len(pool)) if pool else 0)) for label, pool in _lanes("writing", t1_labels, MOCK_LARGE_BY_TYPE).items()}
-    t2_lanes = {label: list(_rotated(pool, random.randrange(len(pool)) if pool else 0)) for label, pool in _lanes("writing", t2_labels, MOCK_LARGE_BY_TYPE).items()}
+    t1_lanes = {label: list(_rotated(pool, random.randrange(len(pool)) if pool else 0)) for label, pool in _lanes("writing", t1_labels, MOCK_LARGE_BY_TYPE, prefix="mock").items()}
+    t2_lanes = {label: list(_rotated(pool, random.randrange(len(pool)) if pool else 0)) for label, pool in _lanes("writing", t2_labels, MOCK_LARGE_BY_TYPE, prefix="mock").items()}
     t1 = _mixed(t1_lanes, random.randrange(len(t1_labels)) if t1_labels else 0, 1)
     t2 = _mixed(t2_lanes, random.randrange(len(t2_labels)) if t2_labels else 0, 1)
     if not t1 or not t2:
@@ -218,9 +221,9 @@ def _p1_cats() -> list[str]:
 
 def _speaking(paper_no: int) -> list[Item]:
     cats = _p1_cats()
-    p1_lane = _lanes("speaking", ["Part 1"], MOCK_LARGE_BY_TYPE)["Part 1"]
-    p2_lane = _lanes("speaking", ["Part 2"], MOCK_LARGE_BY_TYPE)["Part 2"]
-    p3_lane = _lanes("speaking", ["Part 3"], MOCK_LARGE_BY_TYPE)["Part 3"]
+    p1_lane = _lanes("speaking", ["Part 1"], MOCK_LARGE_BY_TYPE, prefix="mock")["Part 1"]
+    p2_lane = _lanes("speaking", ["Part 2"], MOCK_LARGE_BY_TYPE, prefix="mock")["Part 2"]
+    p3_lane = _lanes("speaking", ["Part 3"], MOCK_LARGE_BY_TYPE, prefix="mock")["Part 3"]
 
     items: list[Item] = []
 
