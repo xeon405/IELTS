@@ -1,4 +1,4 @@
-﻿const BASE = "http://127.0.0.1:8000/api";
+﻿const BASE = ((process.env.API_URL || "http://127.0.0.1:8000").replace(/\/+$/, "")) + "/api";
 const results = [];
 let token = "";
 const check = (name, pass, detail = "") => { results.push({ pass, name, detail }); console.log(`${pass ? "PASS" : "FAIL"} ${name}${detail ? "  ->  " + detail : ""}`); };
