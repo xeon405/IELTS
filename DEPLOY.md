@@ -4,12 +4,14 @@ Everything needed to put **Mkg.IELTS.COM** on the internet with free accounts, a
 
 ## STATUS (2026-08-16)
 
-- Frontend: **LIVE** at https://ielts-master-2026.vercel.app (Vercel, git-connected, auto-deploys on push)
-- Backend: **LIVE** at https://ielts-api-hypc.onrender.com (Render, **Docker** runtime, free plan, auto-deploy on push)
+- Frontend: **LIVE** at https://ielts-master-2026.vercel.app (Vercel, git-connected). Production branch must be set to `master` in Vercel dashboard → Settings → Git for pushes to auto-deploy production (previews already build green).
+- Backend: **LIVE** at https://ielts-api-hypc.onrender.com (Render, **Docker** runtime, free plan, auto-deploy on push). Kept awake by .github/workflows/keepalive.yml (5-min health ping).
+- Live-functional fixes (2026-08-16): removed Ideavo `vercel.json` (it bricked every git build: `MISSING_SERVICES`, framework was `services` → set to `nextjs`); proxy route `src/app/api/brain/[...path]/route.ts` forwards `/api/brain/*` (check/vocab/bank/session/…) to the Render backend; restored the 7 offline handlers (mock/evaluate/recommendation/tutor/report/blueprints/blueprint) for anonymous/offline use; `brainCall` falls back offline on 401 only when no token exists; health probe timeout raised 1.6s → 10s (free-tier cold starts); backend URL resolution is lazy so a missing env var can't brick builds.
+- Verified live: `/api/brain/vocab` → 401 from Render (was 404), `/api/brain/check` → proxied to Render, `/api/brain/recommendation` → real data, `/api/brain/mock` → offline evaluation, Render `/health` → 200, CSP/security headers intact.
 - Database: Supabase Postgres (shared with local dev DB)
-- Environment: `APP_ENV=production`, all 19 vars set via Render API; JWT_SECRET generated and stored on Render only
+- Environment: `APP_ENV=production`, all 19 vars set via Render API; JWT_SECRET generated and stored on Render only; `NEXT_PUBLIC_*` envs set for all three Vercel environments (production/preview/development)
 - Tested: 36/36 local regression suite; prod CORS incl. Authorization preflight; security headers on both surfaces
-- OUTSTANDING: Resend domain verification (buy domain, verify, update `RESEND_API_KEY`/`RESEND_FROM`); Google Sign-In authorized origin; Search Console; GitHub Support ticket (optional)
+- OUTSTANDING: Resend domain verification (buy domain, verify, update `RESEND_API_KEY`/`RESEND_FROM` — until then test-mode emails are never delivered; register with the Resend-verified inbox or switch to Gmail SMTP for real delivery); Google Sign-In authorized origin (add `https://ielts-master-2026.vercel.app` in Google Cloud Console); Search Console; GitHub Support ticket (optional)
 
 ## Prerequisites (all free)
 
