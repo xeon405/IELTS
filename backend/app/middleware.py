@@ -10,7 +10,7 @@ from starlette.requests import Request
 
 from .config import settings
 
-logger = logging.getLogger("uvicorn.access")
+logger = logging.getLogger("app.middleware")
 
 # Hard ceiling for any single request body. Per-route payloads are bounded
 # more tightly in the Pydantic schemas; this is the last line of defence
@@ -56,12 +56,14 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         if settings.APP_ENV == "production":
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         logger.info(
-            "request_id=%s method=%s path=%s status=%d duration_ms=%.1f ip=%s",
-            request_id,
-            request.method,
-            request.url.path,
-            response.status_code,
-            duration_ms,
-            request.client.host if request.client else "unknown",
+            "request_id=%s method=%s path=%s status=%d duration_ms=%.1f ip=%s"
+            % (
+                request_id,
+                request.method,
+                request.url.path,
+                response.status_code,
+                duration_ms,
+                request.client.host if request.client else "unknown",
+            )
         )
         return response
