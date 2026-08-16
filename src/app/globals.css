@@ -405,8 +405,17 @@ nextjs-portal {
 }
 
 [data-theme]:not([data-theme="light"])
-  [class*="bg-[#17342f]"]:not([class*="/5"]):not([class*="/8"]):not([class*="/10"]) {
+  [class*="bg-[#17342f]"]:not([class*="/5"]):not([class*="/8"]):not([class*="/10"]):not([class*="/25"]):not([class*="/50"]) {
   background-color: var(--t-ink);
+}
+
+/* Translucent ink overlays must stay translucent (menu veil, modal scrim) */
+[data-theme]:not([data-theme="light"]) [class*="bg-[#17342f]/25"] {
+  background-color: color-mix(in oklab, var(--t-ink) 25%, transparent);
+}
+
+[data-theme]:not([data-theme="light"]) [class*="bg-[#17342f]/50"] {
+  background-color: color-mix(in oklab, var(--t-ink) 50%, transparent);
 }
 
 [data-theme]:not([data-theme="light"]) [class*="bg-[#e4f0ea]"],
