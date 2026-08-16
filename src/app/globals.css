@@ -296,30 +296,163 @@ nextjs-portal {
   --t-amber-hover: #d8ab5c;
 }
 
+[data-theme="mint"] {
+  --t-paper: #e9f5ea;
+  --t-grid: #ddeee0;
+  --t-cream: #f3faf4;
+  --t-cream2: #ffffff;
+  --t-ink: #1e4d33;
+  --t-ink-text: #1e4d33;
+  --t-body-text: #4f6b5a;
+  --t-gold-text: #7a6a2f;
+  --t-chalk-text: #7d8a80;
+  --t-border: #c4dccb;
+  --t-border2: #d3e6d8;
+  --t-chip: #dceae1;
+  --t-chip-gold: #f0e8cf;
+  --t-chip-rose: #f6e7e4;
+  --t-chip-blue: #e2ecf0;
+  --t-chip-lilac: #ebe5f2;
+  --t-link: #2f7d4f;
+  --t-info: #2f6f8f;
+  --t-error: #8f4a35;
+  --t-orange: #c97a2e;
+  --t-amber: #cfab4e;
+  --t-amber-hover: #dcba5e;
+}
+
 [data-theme="dark"] {
-  --t-paper: #0e1714;
-  --t-grid: #0e1714;
-  --t-cream: #131e1a;
-  --t-cream2: #18231f;
-  --t-white: #1b2722;
-  --t-ink: #1e312b;
-  --t-ink-text: #eaf2ed;
-  --t-body-text: #a9bbb1;
-  --t-gold-text: #e6c983;
-  --t-chalk-text: #7f9086;
-  --t-border: #2b3a33;
-  --t-border2: #2b3a33;
-  --t-chip: #223029;
-  --t-chip-gold: #223029;
-  --t-chip-rose: #223029;
-  --t-chip-blue: #223029;
-  --t-chip-lilac: #223029;
-  --t-link: #9fd8b4;
-  --t-info: #8cc3e8;
-  --t-error: #f09681;
-  --t-orange: #f0b37a;
+  --t-paper: #0a100e;
+  --t-grid: #0a100e;
+  --t-cream: #0f1915;
+  --t-cream2: #131f1a;
+  --t-white: #15211c;
+  --t-ink: #1a2b23;
+  --t-ink-text: #eef4f0;
+  --t-body-text: #b3c3ba;
+  --t-gold-text: #e9cd8b;
+  --t-chalk-text: #8b9c92;
+  --t-border: #24352c;
+  --t-border2: #24352c;
+  --t-chip: #16241d;
+  --t-chip-gold: #16241d;
+  --t-chip-rose: #16241d;
+  --t-chip-blue: #16241d;
+  --t-chip-lilac: #16241d;
+  --t-link: #a8e0be;
+  --t-info: #93c9ea;
+  --t-error: #f5a189;
+  --t-orange: #f3b783;
   --t-amber: #e3b65f;
   --t-amber-hover: #f0c66f;
+}
+
+/* Midnight depth: faint ambient glows so dark surfaces feel rich, not flat */
+[data-theme="dark"] body {
+  background-image:
+    radial-gradient(1200px 800px at 18% -10%, rgba(227, 182, 95, 0.055), transparent 60%),
+    radial-gradient(1000px 700px at 95% 110%, rgba(109, 168, 148, 0.07), transparent 60%);
+  background-attachment: fixed;
+}
+
+/* Glass cards get a subtle top sheen in midnight */
+[data-theme="dark"] [class*="bg-[#fffaf0]"] {
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0) 45%);
+}
+
+/* Pastel gradient surfaces are light by design; in midnight they must go
+   dark so the light remapped text on them stays readable */
+[data-theme="dark"] [class*="from-[#d9ecd9]"],
+[data-theme="dark"] [class*="from-[#dbece1]"],
+[data-theme="dark"] [class*="from-[#dceaf2]"],
+[data-theme="dark"] [class*="from-[#f4dec8]"] {
+  --tw-gradient-from: #222f26;
+}
+
+[data-theme="dark"] [class*="via-[#eef0d2]"] {
+  --tw-gradient-via: #2b2c1d;
+}
+
+[data-theme="dark"] [class*="via-[#eff5e9]"] {
+  --tw-gradient-via: #202d24;
+}
+
+[data-theme="dark"] [class*="via-[#f5efd6]"],
+[data-theme="dark"] [class*="via-[#f7edd7]"] {
+  --tw-gradient-via: #2d291d;
+}
+
+[data-theme="dark"] [class*="to-[#dce8dd]"] {
+  --tw-gradient-to: #24332a;
+}
+
+[data-theme="dark"] [class*="to-[#f5ddae]"],
+[data-theme="dark"] [class*="to-[#f6dfbf]"],
+[data-theme="dark"] [class*="to-[#f8e9c6]"] {
+  --tw-gradient-to: #332c1d;
+}
+
+/* Main app module cards use their own pastel accents */
+[data-theme="dark"] [class*="from-[#d9e8f5]"],
+[data-theme="dark"] [class*="from-[#d7ecdb]"],
+[data-theme="dark"] [class*="from-[#f7e4c8]"],
+[data-theme="dark"] [class*="from-[#e6ddf6]"] {
+  --tw-gradient-from: #222f26;
+}
+
+[data-theme="dark"] [class*="via-[#e6eef5]"] {
+  --tw-gradient-via: #27323d;
+}
+
+[data-theme="dark"] [class*="via-[#eaf0df]"] {
+  --tw-gradient-via: #253026;
+}
+
+[data-theme="dark"] [class*="via-[#f6ecdb]"] {
+  --tw-gradient-via: #2e2a1e;
+}
+
+[data-theme="dark"] [class*="via-[#f0ebfb]"] {
+  --tw-gradient-via: #2b2536;
+}
+
+[data-theme="dark"] [class*="to-[#c9dfee]"] {
+  --tw-gradient-to: #2b3a4a;
+}
+
+[data-theme="dark"] [class*="to-[#cfe6c8]"] {
+  --tw-gradient-to: #24332a;
+}
+
+[data-theme="dark"] [class*="to-[#f3dabe]"] {
+  --tw-gradient-to: #332c1d;
+}
+
+[data-theme="dark"] [class*="to-[#d9ccef]"] {
+  --tw-gradient-to: #372c49;
+}
+
+/* Menu highlight: strong theme-ink swatch with a gold icon accent —
+   unmistakable in every theme, never white */
+.nav-hover {
+  transition:
+    background-color 0.22s ease,
+    color 0.22s ease,
+    box-shadow 0.22s ease,
+    transform 0.22s ease;
+}
+
+[data-theme] .nav-hover:hover {
+  background-color: var(--t-ink);
+  color: var(--t-ink-text);
+  box-shadow:
+    0 10px 28px rgba(10, 16, 14, 0.22),
+    0 0 0 1px color-mix(in oklab, var(--t-amber) 45%, transparent);
+  transform: translateY(-1px);
+}
+
+[data-theme] .nav-hover:hover svg {
+  color: var(--t-amber);
 }
 
 [data-theme="dark"] [class*="bg-[#e3b65f]"]:not([class*="/5"]):not([class*="/20"]):not([class*="/25"]):not([class*="/30"]):not([class*="/40"]) {

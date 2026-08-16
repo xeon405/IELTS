@@ -82,7 +82,7 @@ export function Dashboard({
   return (
     <div className="space-y-5">
       <Reveal>
-        <section className="grid gap-5 xl:grid-cols-[1.4fr_0.9fr]">
+        <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1.4fr_0.9fr]">
         <div className="relative overflow-hidden rounded-[2.4rem] border border-white/70 bg-[#17342f] p-6 text-white shadow-[0_24px_90px_rgba(23,52,47,0.24)] md:p-8">
           <div className="absolute right-8 top-8 h-32 w-32 rounded-full border border-[#e3b65f]/30" />
           <div className="absolute -right-16 bottom-[-5rem] h-64 w-64 rounded-full bg-[#e3b65f]/20 blur-2xl" />
@@ -123,7 +123,7 @@ export function Dashboard({
       </Reveal>
 
       <Reveal delay={60}>
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard icon={Target} label="Current band" value={profile.currentBand.toFixed(1)} detail={`Target ${profile.targetBand.toFixed(1)}`} />
         <MetricCard icon={Activity} label="Study streak" value={`${profile.studyStreak}`} detail="days of profile memory" />
         <MetricCard icon={Timer} label="Weekly goal" value={`${profile.completedHours}/${profile.weeklyGoalHours}h`} detail="practice hours" />
@@ -132,7 +132,7 @@ export function Dashboard({
       </Reveal>
 
       <Reveal delay={120}>
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         <ContinueCard lastSession={lastSession} onContinue={onContinue} />
         <QuickCard onQuick={onQuick} />
         <MockShortcut onStartMock={onStartMock} />
@@ -140,7 +140,7 @@ export function Dashboard({
       </Reveal>
 
       <Reveal delay={180}>
-        <section className="grid min-w-0 gap-5 xl:grid-cols-[1.15fr_0.85fr]">
+        <section className="grid grid-cols-1 min-w-0 gap-5 xl:grid-cols-[1.15fr_0.85fr]">
         <ModuleGrid profile={profile} onLaunchPractice={onLaunchPractice} />
         <div className="min-w-0 space-y-5">
           <WeaknessMap profile={profile} />

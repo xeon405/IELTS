@@ -1,4 +1,4 @@
-export type ThemeId = "light" | "warm" | "dark" | "ocean" | "graphite" | "royal";
+export type ThemeId = "light" | "warm" | "dark" | "ocean" | "graphite" | "royal" | "mint";
 
 export const settingsKey = "ai-ielts-examiner-settings";
 
@@ -10,6 +10,7 @@ export const THEMES: {
 }[] = [
   { id: "light", label: "Light", tagline: "Exam paper", swatch: "linear-gradient(135deg, #fffaf0 0%, #e3b65f 100%)" },
   { id: "warm", label: "Warm", tagline: "Parchment", swatch: "linear-gradient(135deg, #fbf1dd 0%, #d9a45c 100%)" },
+  { id: "mint", label: "Mint", tagline: "Fresh sage", swatch: "linear-gradient(135deg, #eaf7ec 0%, #7fc58a 100%)" },
   { id: "dark", label: "Dark", tagline: "Night study", swatch: "linear-gradient(135deg, #1b2722 0%, #e3b65f 100%)" },
   { id: "ocean", label: "Ocean", tagline: "Cool focus", swatch: "linear-gradient(135deg, #eef4fb 0%, #4a8db7 100%)" },
   { id: "graphite", label: "Graphite", tagline: "Charcoal", swatch: "linear-gradient(135deg, #f4f4f1 0%, #6e7278 100%)" },

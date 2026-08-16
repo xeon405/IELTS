@@ -79,7 +79,7 @@ export function Sidebar({
                   ? cn("text-white shadow-lg", skillConfig.accent)
                   : active
                     ? "bg-[#17342f] text-white shadow-lg shadow-[#17342f]/20"
-                    : "text-[#34534d] hover:bg-white/80 hover:text-[#17342f]",
+                    : "nav-hover text-[#34534d]",
               )}
             >
               <Icon className={cn("h-4 w-4", active ? "text-white" : "text-[#8b6f39]")} />

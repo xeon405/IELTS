@@ -71,13 +71,15 @@ export function SettingsPanel({
           ? "Reduced-light surface for evening study."
           : option === "warm"
             ? "Warm parchment tones across the app shell."
-            : option === "ocean"
-              ? "Cool, focused blues for long study days."
-              : option === "graphite"
-                ? "Neutral charcoal surfaces with clean contrast."
-                : option === "royal"
-                  ? "Premium violet surfaces with a refined edge."
-                  : "Default exam-style theme restored.",
+            : option === "mint"
+              ? "Fresh sage-green surfaces, soft on the eyes."
+              : option === "ocean"
+                ? "Cool, focused blues for long study days."
+                : option === "graphite"
+                  ? "Neutral charcoal surfaces with clean contrast."
+                  : option === "royal"
+                    ? "Premium violet surfaces with a refined edge."
+                    : "Default exam-style theme restored.",
     });
   }
 

@@ -43,7 +43,7 @@ export default function RootLayout({
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t;try{t=JSON.parse(window.localStorage.getItem("ai-ielts-examiner-settings")||"{}").theme}catch(e){}if(["light","warm","dark","ocean","graphite","royal"].indexOf(t)<0)t="light";document.documentElement.dataset.theme=t;}catch(e){}})();`,
+            __html: `(function(){try{var t;try{t=JSON.parse(window.localStorage.getItem("ai-ielts-examiner-settings")||"{}").theme}catch(e){}if(["light","warm","dark","ocean","graphite","royal","mint"].indexOf(t)<0)t="light";document.documentElement.dataset.theme=t;}catch(e){}})();`,
           }}
         />
       </head>
