@@ -67,6 +67,12 @@ class Settings(BaseSettings):
     RESEND_API_KEY: str = ""
     RESEND_FROM: str = "IELTS Examiner <onboarding@resend.dev>"
 
+    # Optional beta-only escape hatch: while real email delivery isn't set up,
+    # the account registered with THIS address gets its verification code
+    # shown on screen. Exactly one address; empty disables it. Remove once
+    # email delivery is live (SMTP or a verified Resend domain).
+    BETA_VERIFY_EMAIL: str = ""
+
 
 def is_dev() -> bool:
     """Fail-closed environment gate: ONLY an explicit ``development`` value

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import AuthShell from "@/components/auth-shell";
 import GoogleSignIn from "@/components/google-sign-in";
-import { authApi, setAuth, isAuthenticated, IS_DEV } from "@/lib/backend";
+import { authApi, setAuth, isAuthenticated } from "@/lib/backend";
 
 const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? "";
 
@@ -122,11 +122,11 @@ export default function RegisterPage() {
       ) : verifiedEmail ? (
         <form onSubmit={handleVerify} className="space-y-4">
           {error ? <p className="rounded-xl bg-[#f8e1d6] px-4 py-3 text-sm font-semibold text-[#9a3b1f]">{error}</p> : null}
-          {IS_DEV && devCode ? (
+          {devCode ? (
             <div className="rounded-2xl border border-[#e3dac6] bg-[#f5eddc] px-4 py-3">
-              <p className="text-xs font-black uppercase tracking-[0.14em] text-[#8b6f39]">Development preview</p>
+              <p className="text-xs font-black uppercase tracking-[0.14em] text-[#8b6f39]">Your verification code</p>
               <p className="mt-1 font-mono text-2xl font-black tracking-[0.5em] text-[#17342f]">{devCode}</p>
-              <p className="mt-1 text-xs text-[#66746e]">No email provider is configured, so the code is shown here.</p>
+              <p className="mt-1 text-xs text-[#66746e]">Email delivery isn&apos;t set up for this account yet, so the code is shown here.</p>
             </div>
           ) : null}
           <Field label="6-digit code">

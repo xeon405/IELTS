@@ -209,9 +209,14 @@ def _email_configured() -> bool:
     return bool(settings.RESEND_API_KEY or settings.SMTP_HOST)
 
 
-def _dev_code_for(delivered: bool, code: str) -> str | None:
-    """Expose the code on screen ONLY in local development and only when the
-    email could not be delivered. Fail-closed: any other mode hides it."""
+def _dev_code_for(delivered: bool, code: str, email: str | None = None) -> str | None:
+    """Expose the code on screen ONLY in local development (when email could
+    not be delivered) or for the single beta owner configured in
+    BETA_VERIFY_EMAIL. The owner cannot receive email until real delivery is
+    set up, and this keeps their own account usable while it stays broken.
+    Fail-closed: any other account gets nothing."""
+    if settings.BETA_VERIFY_EMAIL and email and email.lower() == settings.BETA_VERIFY_EMAIL.lower():
+        return code
     if delivered or not is_dev():
         return None
     return code
@@ -307,7 +312,7 @@ def register(
         message="Almost there. Enter the 6-digit code sent to your email to activate your account."
         if delivered
         else "Couldn't reach your inbox yet — try the resend button in a moment.",
-        dev_code=_dev_code_for(delivered, code),
+        dev_code=_dev_code_for(delivered, code, user.email),
     )
 
 
@@ -356,7 +361,7 @@ def resend_verification(
         message="A new 6-digit verification code has been sent."
         if delivered
         else "Couldn't reach your inbox yet — try again in a moment.",
-        dev_code=_dev_code_for(delivered, code),
+        dev_code=_dev_code_for(delivered, code, user.email),
     )
 
 

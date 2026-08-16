@@ -240,7 +240,7 @@ export function PracticeModule({
               <div className="flex flex-wrap gap-2">
                 <dt className="font-bold text-[#17342f]">Backend reachable:</dt>
                 <dd className={bankError.backendUp ? "font-bold text-[#2f7151]" : "font-bold text-red-600"}>
-                  {bankError.backendUp ? "Yes — health check passed" : "No — health check failed (is the backend running on port 8000?)"}
+                  {bankError.backendUp ? "Yes — health check passed" : "No — health check failed"}
                 </dd>
               </div>
             </dl>
