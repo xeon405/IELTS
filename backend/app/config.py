@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     AI_PROVIDER: str = "auto"  # auto | groq | gemini | groq-only | gemini-only | offline
     AI_MIN_INTERVAL_SECONDS: float = 1.2  # minimum spacing between outgoing AI calls (avoids free-tier 429s)
     AI_MAX_ITEMS_PER_CALL: int = 5  # sessions larger than this use the offline banks (AI output-token cap)
+    AI_JUDGES: int = 3  # independent examiner judges per writing/speaking evaluation (1-3; run in parallel)
 
     GROQ_API_KEY: str = ""
     # Optional: comma-separated pool of Groq keys. One is picked at random per

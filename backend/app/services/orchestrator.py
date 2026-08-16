@@ -120,7 +120,7 @@ def recommend_and_generate(
     difficulty = adaptive.pick_difficulty(state, module)
     types = adaptive.pick_question_types(state, module, mode)
 
-    profile_dict = adaptive.serialize_profile(db, profile)
+    profile_dict = adaptive.profile_brief(profile)
     full = qg.generate_session(profile_dict, module, mode, count, question_type)
     full["id"] = f"{full.get('id')}-{uuid4().hex[:8]}"
     full["difficultyBand"] = difficulty
@@ -154,7 +154,7 @@ def generate_session(
     difficulty = adaptive.pick_difficulty(state, module)
     types = adaptive.pick_question_types(state, module, mode)
 
-    profile_dict = adaptive.serialize_profile(db, profile)
+    profile_dict = adaptive.profile_brief(profile)
     full = qg.generate_session(profile_dict, module, mode, count, question_type)
     full["id"] = f"{full.get('id')}-{uuid4().hex[:8]}"
     full["difficultyBand"] = difficulty

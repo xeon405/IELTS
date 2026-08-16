@@ -145,12 +145,14 @@ export function PracticeModule({
   const matchedEvaluation = active && session !== null && evaluation?.sessionId === session.id ? evaluation : null;
 
   const openBank = async (type: string) => {
+    const activeAbort = new AbortController();
     activeTypeRef.current = type;
     setBankLoading(true);
     setBankError(null);
     let lastError = "";
     let lastStatus: number | null = null;
     for (let attempt = 0; attempt < 3; attempt += 1) {
+      if (activeAbort.signal.aborted) return;
       try {
         const response = await brainApi.bank(profile, module, type, 800);
         if (response.session && response.session.items.length > 0) {
@@ -164,8 +166,9 @@ export function PracticeModule({
         lastError = error instanceof Error ? error.message : String(error);
         lastStatus = (error as Error & { status?: number }).status ?? null;
         console.error("[bank] attempt", attempt + 1, "failed:", lastError);
+        if (lastStatus !== null && lastStatus >= 400 && lastStatus < 500) break;
       }
-      if (attempt < 2 && lastStatus !== 401) await new Promise((resolve) => setTimeout(resolve, 1800));
+      if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 600));
     }
     const backendUp = await isBackendUp().catch(() => false);
     setBankError({ reason: lastError, backendUp, authExpired: lastStatus === 401 });

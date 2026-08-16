@@ -136,6 +136,24 @@ def _progress(db: Session, user_id: int, bands: dict[str, float]) -> list[dict]:
     return points[-20:]
 
 
+def profile_brief(profile: models.StudentProfile) -> dict[str, Any]:
+    """Lightweight profile slice for AI prompt building — zero DB queries.
+
+    ``serialize_profile`` runs several queries (history/progress) and is only
+    needed for API responses; prompt building needs just bands and weaknesses.
+    """
+    return {
+        "id": str(profile.id),
+        "currentBand": float(profile.current_band),
+        "targetBand": float(profile.target_band),
+        "testType": profile.test_type,
+        "bands": _skill_bands(profile),
+        "weakQuestionTypes": list(profile.weak_question_types or []),
+        "weakTopics": list(profile.weak_topics or []),
+        "strongSignals": list(profile.strong_signals or []),
+    }
+
+
 def serialize_profile(db: Session, profile: models.StudentProfile) -> dict[str, Any]:
     bands = _skill_bands(profile)
     return {

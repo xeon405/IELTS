@@ -13,7 +13,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .config import settings
 from .database import Base, engine, active_dialect
-from .middleware import RequestContextMiddleware
+from .middleware import BodySizeLimitMiddleware, RequestContextMiddleware
 from .routers import auth, brain, diagnostic
 
 logging.basicConfig(
@@ -88,6 +88,7 @@ app = FastAPI(
     redoc_url=None if settings.APP_ENV == "production" else None,
 )
 
+app.add_middleware(BodySizeLimitMiddleware)
 app.add_middleware(RequestContextMiddleware)
 app.add_middleware(
     CORSMiddleware,
@@ -103,7 +104,6 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     return JSONResponse(
         status_code=exc.status_code,
         content={"detail": str(exc.detail)},
-        headers={"X-Request-ID": request.headers.get("x-request-id", "")},
     )
 
 
@@ -112,7 +112,6 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     return JSONResponse(
         status_code=422,
         content={"detail": "Invalid request payload", "errors": exc.errors()},
-        headers={"X-Request-ID": request.headers.get("x-request-id", "")},
     )
 
 
@@ -122,7 +121,6 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=500,
         content={"detail": "Internal server error"},
-        headers={"X-Request-ID": request.headers.get("x-request-id", "")},
     )
 
 

@@ -24,6 +24,12 @@ from ..services import large_bank as lb
 from ..services import orchestrator
 from ..services import recommendation
 from ..services import tts_service
+from ..services.ratelimit import rate_limit
+
+# AI-generation endpoints burn real money/time (LLM + Whisper + TTS calls).
+# 120 requests / 5 min / IP on top of auth-level limits stops token-farming.
+_BRAIN_AI_LIMIT = rate_limit("brain-ai", 120, 300)
+_BRAIN_READ_LIMIT = rate_limit("brain-read", 300, 300)
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -119,7 +125,7 @@ def recommend(payload: BrainRequest, user: models.User = Depends(get_current_use
 
 
 @router.post("/recommendation")
-def get_recommendation(payload: BrainRequest, user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+def get_recommendation(payload: BrainRequest, _: None = Depends(_BRAIN_AI_LIMIT), user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     profile = get_or_create_profile(db, user)
     result = orchestrator.recommend_and_generate(db, user, profile, payload.module, payload.mode, question_type=payload.questionType)
     result["session"]["source"] = "ai" if gemini.is_ai_available() else "offline"
@@ -134,7 +140,7 @@ def _safe_int(value: Any, default: int | None = None) -> int | None:
 
 
 @router.post("/session")
-def session(payload: SessionRequest, user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+def session(payload: SessionRequest, _: None = Depends(_BRAIN_AI_LIMIT), user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     profile = get_or_create_profile(db, user)
     module = str((payload.session or {}).get("module") or "reading")
     mode = str((payload.session or {}).get("mode") or "Question by Question")
@@ -146,7 +152,7 @@ def session(payload: SessionRequest, user: models.User = Depends(get_current_use
 
 
 @router.post("/evaluate")
-def evaluate(payload: SessionRequest, user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+def evaluate(payload: SessionRequest, _: None = Depends(_BRAIN_AI_LIMIT), user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     profile = get_or_create_profile(db, user)
     if not payload.session:
         raise HTTPException(status_code=400, detail="Practice session is required.")
@@ -187,7 +193,7 @@ def check_answer(payload: SessionRequest, user: models.User = Depends(get_curren
 
 
 @router.post("/bank")
-def bank(payload: SessionRequest, user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+def bank(payload: SessionRequest, _: None = Depends(_BRAIN_AI_LIMIT), user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Return one offline bank session (~500 items) for a given question type.
 
     The frontend opens the bank to see the question types and to pick a type
@@ -269,7 +275,7 @@ def mock_exam(payload: SessionRequest, user: models.User = Depends(get_current_u
 
 
 @router.post("/tts")
-def tts(payload: TTSRequest, _: models.User = Depends(get_current_user)):
+def tts(payload: TTSRequest, _: None = Depends(_BRAIN_AI_LIMIT), __: models.User = Depends(get_current_user)):
     """Synthesize listening script text into MP3 audio (edge-tts, disk-cached).
 
     The frontend falls back to this real audio whenever browser speech
@@ -291,7 +297,7 @@ def tts(payload: TTSRequest, _: models.User = Depends(get_current_user)):
 
 
 @router.post("/transcribe")
-def transcribe(payload: TranscribeRequest, _: models.User = Depends(get_current_user)):
+def transcribe(payload: TranscribeRequest, _: None = Depends(_BRAIN_AI_LIMIT), __: models.User = Depends(get_current_user)):
     """Transcribe a recorded voice note (WAV/WebM/MP4) with Groq Whisper.
 
     The frontend uploads the base64 audio captured by the MediaRecorder; the
@@ -440,7 +446,7 @@ def _adaptive_order_items(pool: list[dict], current: float, target: float, modul
 
 
 @router.post("/vocab")
-def vocab(payload: BrainRequest, user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+def vocab(payload: BrainRequest, _: None = Depends(_BRAIN_AI_LIMIT), user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Generate one fresh IELTS vocabulary word with the AI provider.
 
     The frontend sends every word already shown so the AI never repeats a
@@ -491,7 +497,7 @@ def _fallback_vocab_word(seen: set[str]) -> dict:
 
 
 @router.post("/mock")
-def mock(payload: MockRequest, user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+def mock(payload: MockRequest, _: None = Depends(_BRAIN_AI_LIMIT), user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     profile = get_or_create_profile(db, user)
     answered = {
         item_id: value
@@ -524,7 +530,7 @@ def mock(payload: MockRequest, user: models.User = Depends(get_current_user), db
 
 
 @router.post("/tutor")
-def tutor(payload: TutorRequest, user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+def tutor(payload: TutorRequest, _: None = Depends(_BRAIN_AI_LIMIT), user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     profile = get_or_create_profile(db, user)
     bands = adaptive._skill_bands(profile)
     context = (
@@ -656,20 +662,20 @@ def _report_payload(db: Session, user: models.User, profile: models.StudentProfi
 
 
 @router.api_route("/report", methods=["GET", "POST"])
-def report(user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+def report(_: None = Depends(_BRAIN_READ_LIMIT), user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     profile = get_or_create_profile(db, user)
     return _report_payload(db, user, profile)
 
 
 @router.get("/blueprint")
-def blueprint(module: str = "reading"):
+def blueprint(module: str = "reading", _: None = Depends(_BRAIN_READ_LIMIT)):
     module = module if module in SKILLS else "reading"
     data = dict(kb.get_blueprint(module))
     return data
 
 
 @router.get("/blueprints")
-def blueprints(module: str = "reading", user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+def blueprints(module: str = "reading", _: None = Depends(_BRAIN_READ_LIMIT), user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     get_or_create_profile(db, user)
     module = module if module in SKILLS else "reading"
     modes = kb.MODES[module]

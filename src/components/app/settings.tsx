@@ -23,33 +23,32 @@ export function SettingsPanel({
   setProfile: Dispatch<SetStateAction<StudentLearningProfile>>;
   onReset: () => void;
 }) {
-  const [notifications, setNotifications] = useState(() => {
+  const cached = useState(() => {
     try {
       const raw = window.localStorage.getItem(settingsKey);
-      const parsed = raw ? (JSON.parse(raw) as { practice?: boolean; mock?: boolean; tips?: boolean }) : null;
-      return { practice: parsed?.practice ?? true, mock: parsed?.mock ?? true, tips: parsed?.tips ?? false };
+      return raw ? (JSON.parse(raw) as Record<string, unknown>) : null;
     } catch {
-      return { practice: true, mock: true, tips: false };
+      return null;
     }
-  });
-  const [theme, setTheme] = useState(() => {
-    try {
-      const raw = window.localStorage.getItem(settingsKey);
-      const parsed = raw ? (JSON.parse(raw) as { theme?: string }) : null;
-      return parsed?.theme === "warm" || parsed?.theme === "dark" ? parsed.theme : "light";
-    } catch {
-      return "light";
-    }
-  });
-  const [plan, setPlan] = useState(() => {
-    try {
-      const raw = window.localStorage.getItem(settingsKey);
-      const parsed = raw ? (JSON.parse(raw) as { plan?: string }) : null;
-      return parsed?.plan === "Pro" || parsed?.plan === "Tutor Plus" ? parsed.plan : "Free";
-    } catch {
-      return "Free";
-    }
-  });
+  })[0];
+  const storedSettings = (cached ?? {}) as {
+    practice?: boolean;
+    mock?: boolean;
+    tips?: boolean;
+    theme?: string;
+    plan?: string;
+  };
+  const [notifications, setNotifications] = useState(() => ({
+    practice: storedSettings.practice ?? true,
+    mock: storedSettings.mock ?? true,
+    tips: storedSettings.tips ?? false,
+  }));
+  const [theme, setTheme] = useState(() =>
+    storedSettings.theme === "warm" || storedSettings.theme === "dark" ? storedSettings.theme : "light",
+  );
+  const [plan, setPlan] = useState(() =>
+    storedSettings.plan === "Pro" || storedSettings.plan === "Tutor Plus" ? storedSettings.plan : "Free",
+  );
 
   useEffect(() => {
     window.localStorage.setItem(

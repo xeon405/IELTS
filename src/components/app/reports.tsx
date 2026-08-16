@@ -18,8 +18,15 @@ export function Reports({ profile }: { profile: StudentLearningProfile }) {
       .then((report) => {
         if (!cancelled) setData(report);
       })
-      .catch(() => {
-        // keep the local fallback
+      .catch((error) => {
+        // Show the local fallback, but don't hide that live data failed.
+        console.warn("[reports] backend report unavailable:", error);
+        const notice = document.createElement("div");
+        notice.textContent = "Live report unavailable — showing locally computed estimates.";
+        notice.style.cssText =
+          "position:fixed;bottom:1rem;left:50%;transform:translateX(-50%);background:#17342f;color:#fff;padding:0.6rem 1rem;border-radius:0.75rem;font-size:0.875rem;z-index:9999;box-shadow:0 8px 30px rgba(0,0,0,0.25)";
+        document.body.appendChild(notice);
+        setTimeout(() => notice.remove(), 4000);
       });
     return () => {
       cancelled = true;

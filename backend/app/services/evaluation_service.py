@@ -8,12 +8,14 @@ heuristic based on length, structure and vocabulary range."""
 
 import difflib
 import re
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy.orm import Session
 
 from .. import models
+from ..config import settings
 from . import band_prediction as bp
 from . import gemini
 from . import knowledge_base as kb
@@ -740,12 +742,17 @@ def _ensemble_subjective(skill: str, text: str, prompt: str) -> dict | None:
 
     Mirrors how real assessment platforms de-risk a single AI verdict:
     multiple judges -> median band -> agreement/confidence score -> report.
+    Judges run in parallel so a 3-judge panel takes ~1 call's latency.
     """
-    judges = [
-        _gemini_judge(skill, text, prompt, 0.35, "Judge A"),
-        _gemini_judge(skill, text, prompt, 0.7, "Judge B"),
-        _gemini_judge(skill, text, prompt, 1.0, "Judge C"),
+    judge_specs = [
+        (0.35, "Judge A"),
+        (0.7, "Judge B"),
+        (1.0, "Judge C"),
     ]
+    count = max(1, min(settings.AI_JUDGES or 3, 3))
+    specs = judge_specs[:count]
+    with ThreadPoolExecutor(max_workers=len(specs)) as pool:
+        judges = list(pool.map(lambda spec: _gemini_judge(skill, text, prompt, spec[0], spec[1]), specs))
     valid = [judge for judge in judges if judge]
     if not valid:
         return None

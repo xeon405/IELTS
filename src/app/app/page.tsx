@@ -400,7 +400,7 @@ export default function AppPage() {
         if (Object.keys(sectionAnswers).length === 0) continue;
         try {
           const timing = { totalSeconds: mockTimingRef.current[skill] || undefined };
-          const response = await brainApi.evaluate(profile, session, sectionAnswers, timing);
+          const response = await brainApi.evaluate(finalProfile, session, sectionAnswers, timing);
           evals[skill] = response.evaluation;
           finalProfile = response.updatedProfile;
           advanceQuestionWindow(skill, MOCK_FULL_MODES[skill], Object.keys(sectionAnswers).length);
