@@ -21,6 +21,7 @@ import type { LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { moduleConfig, skillOrder, type ViewId } from "@/lib/app-config";
+import { Reveal } from "@/components/reveal";
 import type {
   AdaptiveRecommendation,
   PracticeSession,
@@ -80,7 +81,8 @@ export function Dashboard({
 
   return (
     <div className="space-y-5">
-      <section className="grid gap-5 xl:grid-cols-[1.4fr_0.9fr]">
+      <Reveal>
+        <section className="grid gap-5 xl:grid-cols-[1.4fr_0.9fr]">
         <div className="relative overflow-hidden rounded-[2.4rem] border border-white/70 bg-[#17342f] p-6 text-white shadow-[0_24px_90px_rgba(23,52,47,0.24)] md:p-8">
           <div className="absolute right-8 top-8 h-32 w-32 rounded-full border border-[#e3b65f]/30" />
           <div className="absolute -right-16 bottom-[-5rem] h-64 w-64 rounded-full bg-[#e3b65f]/20 blur-2xl" />
@@ -117,29 +119,36 @@ export function Dashboard({
         </div>
 
         <BrainDecisionCard profile={profile} recommendation={recommendation} />
-      </section>
+        </section>
+      </Reveal>
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <Reveal delay={60}>
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard icon={Target} label="Current band" value={profile.currentBand.toFixed(1)} detail={`Target ${profile.targetBand.toFixed(1)}`} />
         <MetricCard icon={Activity} label="Study streak" value={`${profile.studyStreak}`} detail="days of profile memory" />
         <MetricCard icon={Timer} label="Weekly goal" value={`${profile.completedHours}/${profile.weeklyGoalHours}h`} detail="practice hours" />
         <MetricCard icon={ShieldCheck} label="AI confidence" value={`${profile.confidenceLevel}%`} detail="learning profile signal" />
-      </section>
+        </section>
+      </Reveal>
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <Reveal delay={120}>
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <ContinueCard lastSession={lastSession} onContinue={onContinue} />
         <QuickCard onQuick={onQuick} />
         <MockShortcut onStartMock={onStartMock} />
-      </section>
+        </section>
+      </Reveal>
 
-      <section className="grid min-w-0 gap-5 xl:grid-cols-[1.15fr_0.85fr]">
+      <Reveal delay={180}>
+        <section className="grid min-w-0 gap-5 xl:grid-cols-[1.15fr_0.85fr]">
         <ModuleGrid profile={profile} onLaunchPractice={onLaunchPractice} />
         <div className="min-w-0 space-y-5">
           <WeaknessMap profile={profile} />
           <ProgressCard profile={profile} onGoTo={onGoTo} />
           <RecentActivity items={recentActivity} onGoTo={onGoTo} />
-        </div>
-      </section>
+          </div>
+        </section>
+      </Reveal>
     </div>
   );
 }
@@ -191,9 +200,9 @@ function BrainDecisionCard({
 
 function MetricCard({ icon: Icon, label, value, detail }: { icon: LucideIcon; label: string; value: string; detail: string }) {
   return (
-    <div className="rounded-[2rem] border border-white/70 bg-[#fffaf0]/85 p-5 shadow-[0_18px_60px_rgba(33,72,67,0.11)] backdrop-blur-xl">
+    <div className="group hover-lift rounded-[2rem] border border-white/70 bg-[#fffaf0]/85 p-5 shadow-[0_18px_60px_rgba(33,72,67,0.11)] backdrop-blur-xl hover:shadow-[0_26px_70px_rgba(33,72,67,0.18)]">
       <div className="flex items-center justify-between">
-        <span className="rounded-2xl bg-[#17342f] p-3 text-white">
+        <span className="rounded-2xl bg-[#17342f] p-3 text-white transition duration-300 group-hover:scale-110 group-hover:bg-[#245f5a]">
           <Icon className="h-5 w-5" />
         </span>
         <span className="text-xs font-black uppercase tracking-[0.18em] text-[#8b6f39]">{label}</span>

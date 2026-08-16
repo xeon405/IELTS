@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState, type ChangeEvent, type Dispatch, type SetStateAction } from "react";
-import { Bell, CreditCard, Download, Globe, UserRound, Upload } from "lucide-react";
+import { Bell, Check, CreditCard, Download, Globe, UserRound, Upload } from "lucide-react";
 
 import { skillOrder } from "@/lib/app-config";
 import { toast } from "@/hooks/use-toast";
+import { readStoredTheme, persistTheme, THEMES, type ThemeId } from "@/lib/theme";
 import {
   calculateOverallBand,
   migrateProfile,
@@ -43,9 +44,10 @@ export function SettingsPanel({
     mock: storedSettings.mock ?? true,
     tips: storedSettings.tips ?? false,
   }));
-  const [theme, setTheme] = useState(() =>
-    storedSettings.theme === "warm" || storedSettings.theme === "dark" ? storedSettings.theme : "light",
-  );
+  const [theme, setTheme] = useState<ThemeId>(() => {
+    const stored = readStoredTheme();
+    return stored;
+  });
   const [plan, setPlan] = useState(() =>
     storedSettings.plan === "Pro" || storedSettings.plan === "Tutor Plus" ? storedSettings.plan : "Free",
   );
@@ -58,11 +60,24 @@ export function SettingsPanel({
     document.documentElement.dataset.theme = theme;
   }, [theme, plan, notifications]);
 
-  function applyTheme(option: string) {
+  function applyTheme(option: ThemeId) {
     setTheme(option);
+    persistTheme(option);
+    const chosen = THEMES.find((entry) => entry.id === option);
     toast({
-      title: `${option.charAt(0).toUpperCase() + option.slice(1)} theme applied`,
-      description: option === "dark" ? "Reduced-light surface for evening study." : option === "warm" ? "Warm parchment tones across the app shell." : "Default exam-style theme restored.",
+      title: `${chosen?.label ?? option} theme applied`,
+      description:
+        option === "dark"
+          ? "Reduced-light surface for evening study."
+          : option === "warm"
+            ? "Warm parchment tones across the app shell."
+            : option === "ocean"
+              ? "Cool, focused blues for long study days."
+              : option === "graphite"
+                ? "Neutral charcoal surfaces with clean contrast."
+                : option === "royal"
+                  ? "Premium violet surfaces with a refined edge."
+                  : "Default exam-style theme restored.",
     });
   }
 
@@ -214,20 +229,35 @@ export function SettingsPanel({
               <h3 className="font-serif text-2xl font-semibold text-[#17342f]">Appearance</h3>
             </div>
           </div>
-          <div className="mt-4 grid grid-cols-3 gap-2">
-            {["light", "warm", "dark"].map((option) => (
+          <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {THEMES.map((option) => (
               <button
-                key={option}
-                onClick={() => applyTheme(option)}
-                className={`rounded-2xl border px-3 py-3 text-sm font-bold capitalize transition ${
-                  theme === option ? "border-[#17342f] bg-[#17342f] text-white" : "border-[#d8c8a8] bg-white/70 text-[#315149] hover:bg-white"
+                key={option.id}
+                onClick={() => applyTheme(option.id)}
+                className={`relative flex items-center gap-2.5 rounded-2xl border px-3 py-2.5 text-left transition ${
+                  theme === option.id
+                    ? "border-[#17342f] bg-white/85 shadow-lg shadow-[#17342f]/10"
+                    : "border-[#d8c8a8] bg-white/60 hover:border-[#b8a888] hover:bg-white/85"
                 }`}
               >
-                {option}
+                <span
+                  aria-hidden
+                  className="h-9 w-9 shrink-0 rounded-xl border border-black/5 shadow-inner"
+                  style={{ background: option.swatch }}
+                />
+                <span className="min-w-0">
+                  <span className="block text-sm font-black leading-tight text-[#17342f]">{option.label}</span>
+                  <span className="block truncate text-[10px] font-semibold text-[#8b8f88]">{option.tagline}</span>
+                </span>
+                {theme === option.id ? (
+                  <span className="absolute right-2 top-2 grid h-4 w-4 place-items-center rounded-full bg-[#17342f] text-white">
+                    <Check className="h-2.5 w-2.5" />
+                  </span>
+                ) : null}
               </button>
             ))}
           </div>
-          <p className="mt-3 text-xs text-[#8b8f88]">The chosen theme applies to the whole app shell and is saved automatically.</p>
+          <p className="mt-3 text-xs text-[#8b8f88]">Six exam-grade themes — the choice applies to the whole site and saves automatically.</p>
         </div>
 
         <div className="rounded-[2rem] border border-white/70 bg-[#fffaf0]/88 p-5 shadow-[0_18px_60px_rgba(33,72,67,0.12)] backdrop-blur-xl">

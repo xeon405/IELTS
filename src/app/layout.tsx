@@ -39,7 +39,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t;try{t=JSON.parse(window.localStorage.getItem("ai-ielts-examiner-settings")||"{}").theme}catch(e){}if(["light","warm","dark","ocean","graphite","royal"].indexOf(t)<0)t="light";document.documentElement.dataset.theme=t;}catch(e){}})();`,
+          }}
+        />
+      </head>
       <body
         className={`${plusJakarta.variable} ${fraunces.variable} ${spaceMono.variable} antialiased`}
       >

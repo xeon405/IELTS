@@ -23,6 +23,7 @@ import {
 import { cn } from "@/lib/utils";
 import { authApi, setAuth } from "@/lib/backend";
 import GoogleSignIn from "@/components/google-sign-in";
+import { Reveal } from "@/components/reveal";
 
 const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? "";
 
@@ -161,7 +162,7 @@ export default function LandingPage() {
           </button>
           <button
             onClick={() => setAuthMode("register")}
-            className="rounded-2xl bg-[#17342f] px-5 py-2 text-sm font-bold text-white shadow-lg shadow-[#17342f]/20 transition hover:-translate-y-0.5"
+            className="btn-shine rounded-2xl bg-[#17342f] px-5 py-2 text-sm font-bold text-white shadow-lg shadow-[#17342f]/20 transition hover:-translate-y-0.5"
           >
             Get started
           </button>
@@ -169,21 +170,27 @@ export default function LandingPage() {
       </header>
 
       <section className="relative z-10 mx-auto max-w-6xl px-6 pb-24 pt-14 text-center">
-        <div className="mx-auto inline-flex items-center gap-2 rounded-full border border-[#d8c8a8] bg-white/60 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-[#8b6f39]">
+        <div className="animate-soft-rise mx-auto inline-flex items-center gap-2 rounded-full border border-[#d8c8a8] bg-white/60 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-[#8b6f39]">
           <Sparkles className="h-4 w-4" />
           Powered by a backend AI Brain
         </div>
-        <h1 className="mx-auto mt-8 max-w-4xl font-serif text-5xl font-semibold leading-[1.05] tracking-tight text-[#17342f] md:text-7xl">
-          An AI IELTS examiner that <span className="text-[#2f7151]">learns before it teaches.</span>
+        <h1
+          className="animate-soft-rise mx-auto mt-8 max-w-4xl font-serif text-5xl font-semibold leading-[1.05] tracking-tight text-[#17342f] md:text-7xl"
+          style={{ animationDelay: "90ms" }}
+        >
+          An AI IELTS examiner that <span className="text-gradient-accent">learns before it teaches.</span>
         </h1>
-        <p className="mx-auto mt-7 max-w-2xl text-lg leading-8 text-[#5b6b63]">
+        <p
+          className="animate-soft-rise mx-auto mt-7 max-w-2xl text-lg leading-8 text-[#5b6b63]"
+          style={{ animationDelay: "180ms" }}
+        >
           Practice all four skills with real exam timings, get band-descriptor feedback, and let the AI Brain
           choose every session from your learning memory. The interface stays clean — the intelligence stays in the backend.
         </p>
-        <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
+        <div className="animate-soft-rise mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row" style={{ animationDelay: "270ms" }}>
           <Link
             href="/app"
-            className="group inline-flex items-center gap-2 rounded-2xl bg-[#17342f] px-8 py-4 text-sm font-black text-white shadow-xl shadow-[#17342f]/25 transition hover:-translate-y-1"
+            className="btn-shine group inline-flex items-center gap-2 rounded-2xl bg-[#17342f] px-8 py-4 text-sm font-black text-white shadow-xl shadow-[#17342f]/25 transition hover:-translate-y-1"
           >
             Try the demo app
             <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
@@ -195,7 +202,7 @@ export default function LandingPage() {
             See how it works
           </a>
         </div>
-        <div className="mx-auto mt-12 grid max-w-3xl grid-cols-2 gap-4 text-left sm:grid-cols-4">
+        <div className="animate-soft-rise mx-auto mt-12 grid max-w-3xl grid-cols-2 gap-4 text-left sm:grid-cols-4" style={{ animationDelay: "360ms" }}>
           <HeroStat icon={Timer} label="Real timings" value="Official" />
           <HeroStat icon={Trophy} label="Full mocks" value="4 skills" />
           <HeroStat icon={BarChart3} label="Live reports" value="Every session" />
@@ -213,19 +220,18 @@ export default function LandingPage() {
           the AI Brain that decides what you should do next.
         </p>
         <div className="mt-10 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-          {features.map((feature) => {
+          {features.map((feature, index) => {
             const Icon = feature.icon;
             return (
-              <div
-                key={feature.title}
-                className="group rounded-[2rem] border border-white/70 bg-[#fffaf0]/85 p-6 shadow-[0_18px_60px_rgba(33,72,67,0.11)] backdrop-blur-xl transition hover:-translate-y-1"
-              >
-                <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#17342f] text-white transition group-hover:bg-[#245f5a]">
-                  <Icon className="h-5 w-5" />
+              <Reveal key={feature.title} delay={index * 70} className="h-full">
+                <div className="group hover-lift h-full rounded-[2rem] border border-white/70 bg-[#fffaf0]/85 p-6 shadow-[0_18px_60px_rgba(33,72,67,0.11)] backdrop-blur-xl hover:shadow-[0_26px_70px_rgba(33,72,67,0.18)]">
+                  <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#17342f] text-white transition duration-300 group-hover:scale-110 group-hover:bg-[#245f5a]">
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <h3 className="mt-5 font-serif text-2xl font-semibold text-[#17342f]">{feature.title}</h3>
+                  <p className="mt-2 text-sm leading-6 text-[#5f6c66]">{feature.text}</p>
                 </div>
-                <h3 className="mt-5 font-serif text-2xl font-semibold text-[#17342f]">{feature.title}</h3>
-                <p className="mt-2 text-sm leading-6 text-[#5f6c66]">{feature.text}</p>
-              </div>
+              </Reveal>
             );
           })}
         </div>
@@ -258,7 +264,7 @@ export default function LandingPage() {
               ].map((row) => {
                 const Icon = row.icon;
                 return (
-                  <div key={row.name} className="flex items-center gap-4 rounded-2xl border border-white/10 bg-white/10 p-4">
+                  <div key={row.name} className="flex items-center gap-4 rounded-2xl border border-white/10 bg-white/10 p-4 transition duration-300 hover:-translate-y-0.5 hover:bg-white/15">
                     <div className="grid h-11 w-11 place-items-center rounded-xl bg-[#e3b65f] text-[#17342f]">
                       <Icon className="h-5 w-5" />
                     </div>
@@ -303,7 +309,7 @@ export default function LandingPage() {
               <div
                 key={plan.name}
                 className={cn(
-                  "relative rounded-[2.4rem] border p-7 backdrop-blur-xl",
+                  "hover-lift relative rounded-[2.4rem] border p-7 backdrop-blur-xl",
                   plan.highlight
                     ? "border-[#17342f] bg-[#17342f] text-white shadow-[0_24px_90px_rgba(23,52,47,0.3)]"
                     : "border-white/70 bg-[#fffaf0]/85 shadow-[0_18px_60px_rgba(33,72,67,0.11)]",
@@ -338,7 +344,7 @@ export default function LandingPage() {
                 <button
                   onClick={() => setAuthMode("register")}
                   className={cn(
-                    "mt-7 w-full rounded-2xl px-5 py-3 text-sm font-black transition hover:-translate-y-0.5",
+                    "btn-shine mt-7 w-full rounded-2xl px-5 py-3 text-sm font-black transition hover:-translate-y-0.5",
                     plan.highlight ? "bg-[#e3b65f] text-[#17342f] hover:bg-[#f0c66f]" : "bg-[#17342f] text-white hover:bg-[#245f5a]",
                   )}
                 >
@@ -357,7 +363,8 @@ export default function LandingPage() {
         </h2>
         <div className="mt-10 grid gap-5 md:grid-cols-3">
           {testimonials.map((testimonial) => (
-            <div key={testimonial.name} className="rounded-[2rem] border border-white/70 bg-[#fffaf0]/85 p-6 shadow-[0_18px_60px_rgba(33,72,67,0.11)] backdrop-blur-xl">
+            <Reveal key={testimonial.name} delay={0}>
+              <div className="hover-lift h-full rounded-[2rem] border border-white/70 bg-[#fffaf0]/85 p-6 shadow-[0_18px_60px_rgba(33,72,67,0.11)] backdrop-blur-xl hover:shadow-[0_26px_70px_rgba(33,72,67,0.16)]">
               <div className="flex gap-1 text-[#e3b65f]">
                 {"★★★★★".split("").map((star, index) => (
                   <span key={index}>{star}</span>
@@ -373,7 +380,8 @@ export default function LandingPage() {
                   <p className="text-xs text-[#8b8f88]">{testimonial.role}</p>
                 </div>
               </div>
-            </div>
+              </div>
+            </Reveal>
           ))}
         </div>
       </section>
@@ -446,7 +454,7 @@ function SectionLabel({ light = false, children }: { light?: boolean; children: 
 
 function HeroStat({ icon: Icon, label, value }: { icon: typeof Timer; label: string; value: string }) {
   return (
-    <div className="rounded-[2rem] border border-white/70 bg-[#fffaf0]/70 px-4 py-4 backdrop-blur">
+    <div className="rounded-[2rem] border border-white/70 bg-[#fffaf0]/70 px-4 py-4 backdrop-blur transition duration-300 hover:-translate-y-1 hover:bg-[#fffaf0]/90">
       <Icon className="h-5 w-5 text-[#2f7151]" />
       <p className="mt-3 font-mono text-2xl font-bold text-[#17342f]">{value}</p>
       <p className="mt-1 text-xs font-bold uppercase tracking-[0.14em] text-[#8b6f39]">{label}</p>
@@ -576,7 +584,7 @@ function AuthModal({ mode, onClose, onSwitch }: { mode: "login" | "register"; on
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-[#17342f]/50 p-4 backdrop-blur-sm" onClick={onClose}>
       <div
-        className="w-full max-w-md rounded-[2.4rem] border border-white/70 bg-[#fffaf0] p-8 shadow-[0_24px_90px_rgba(23,52,47,0.35)]"
+        className="animate-pop-in w-full max-w-md rounded-[2.4rem] border border-white/70 bg-[#fffaf0] p-8 shadow-[0_24px_90px_rgba(23,52,47,0.35)]"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-center justify-between">

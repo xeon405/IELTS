@@ -1,12 +1,13 @@
 "use client";
 
-import { Brain, LogOut, Sparkles, Timer, ArrowRight, RotateCcw, Menu, X } from "lucide-react";
+import { Brain, LogOut, Timer, ArrowRight, RotateCcw, Menu, X } from "lucide-react";
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { isSkill, moduleConfig, navItems, type ViewId } from "@/lib/app-config";
 import type { AdaptiveRecommendation, StudentLearningProfile } from "@/lib/ielts-brain";
+import { ThemeSwitcher } from "@/components/theme-switcher";
 
 export function Sidebar({
   activeView,
@@ -42,10 +43,10 @@ export function Sidebar({
           <X className="h-4 w-4" />
         </button>
         <div className="rounded-[1.5rem] bg-[#17342f] p-5 text-white shadow-inner shadow-white/10">
-          <div className="flex items-center gap-3">
-            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#e3b65f] text-[#17342f]">
-              <Brain className="h-6 w-6" />
-            </div>
+<div className="flex items-center gap-3">
+          <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#e3b65f] text-[#17342f] animate-glow-pulse">
+            <Brain className="h-6 w-6" />
+          </div>
             <div>
               <p className="text-xs uppercase tracking-[0.28em] text-[#e6c983]">AI-first</p>
               <h1 className="font-serif text-2xl font-semibold leading-none">IELTS Examiner</h1>
@@ -195,11 +196,14 @@ export function TopBar({
           ) : null}
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-[0.22em] text-[#8b6f39]">
-              <Sparkles className="h-4 w-4" />
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#3faf7a] opacity-75" />
+                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#3faf7a]" />
+              </span>
               The website is the interface. The AI Brain decides the path.
             </div>
             <h2 className="mt-2 font-serif text-3xl font-semibold tracking-tight text-[#17342f] md:text-4xl">
-              Good to see you, {profile.name.split(" ")[0]}.
+              Good to see you, <span className="text-gradient">{profile.name.split(" ")[0]}</span>.
             </h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-[#5b6b63]">
               Next best action: {recommendation.mode} for {recommendation.module.charAt(0).toUpperCase() + recommendation.module.slice(1)} because {recommendation.reason}
@@ -208,9 +212,10 @@ export function TopBar({
         </div>
 
         <div className="flex flex-col gap-3 sm:flex-row">
+          <ThemeSwitcher variant="light" />
           <button
             onClick={onAdaptive}
-            className="group inline-flex items-center justify-center gap-2 rounded-2xl bg-[#17342f] px-5 py-3 text-sm font-bold text-white shadow-lg shadow-[#17342f]/20 transition hover:-translate-y-0.5"
+            className="btn-shine group inline-flex items-center justify-center gap-2 rounded-2xl bg-[#17342f] px-5 py-3 text-sm font-bold text-white shadow-lg shadow-[#17342f]/20 transition hover:-translate-y-0.5"
           >
             Start adaptive practice
             <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />

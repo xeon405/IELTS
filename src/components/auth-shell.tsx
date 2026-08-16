@@ -62,7 +62,7 @@ export default function AuthShell({
           </Link>
           <Link
             href="/register"
-            className="rounded-2xl bg-[#17342f] px-4 py-2 text-sm font-bold text-white shadow-lg shadow-[#17342f]/20 transition hover:-translate-y-0.5"
+            className="btn-shine rounded-2xl bg-[#17342f] px-4 py-2 text-sm font-bold text-white shadow-lg shadow-[#17342f]/20 transition hover:-translate-y-0.5"
           >
             Create account
           </Link>
@@ -72,7 +72,7 @@ export default function AuthShell({
       {/* ---- Split hero: pitch + form ---- */}
       <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-12 px-6 py-10 lg:flex-row lg:items-center lg:gap-16">
         {/* Left: marketing panel */}
-        <section className="flex-1">
+        <section className="animate-soft-rise flex-1">
           <p className="text-xs font-black uppercase tracking-[0.24em] text-[#8b6f39]">Adaptive AI training</p>
           <h1 className="mt-4 font-serif text-4xl font-semibold leading-[1.08] tracking-tight md:text-5xl">
             Your personal IELTS examiner is one login away.
@@ -84,7 +84,7 @@ export default function AuthShell({
 
           <ul className="mt-8 grid max-w-xl gap-3 sm:grid-cols-2">
             {highlights.map((item) => (
-              <li key={item.text} className="flex items-start gap-3 rounded-2xl border border-white/70 bg-white/40 px-4 py-3">
+              <li key={item.text} className="flex items-start gap-3 rounded-2xl border border-white/70 bg-white/40 px-4 py-3 transition duration-300 hover:-translate-y-0.5 hover:bg-white/60">
                 <item.icon className="mt-0.5 h-4 w-4 shrink-0 text-[#8b6f39]" />
                 <span className="text-sm font-semibold leading-5 text-[#315149]">{item.text}</span>
               </li>
@@ -104,7 +104,10 @@ export default function AuthShell({
 
         {/* Right: form card */}
         <section className="w-full max-w-md">
-          <div className="rounded-[2.2rem] border border-white/70 bg-[#fffaf0]/90 p-8 shadow-[0_24px_80px_rgba(33,72,67,0.14)]">
+          <div
+            className="animate-soft-rise rounded-[2.2rem] border border-white/70 bg-[#fffaf0]/90 p-8 shadow-[0_24px_80px_rgba(33,72,67,0.14)]"
+            style={{ animationDelay: "120ms" }}
+          >
             <h1 className="font-serif text-3xl font-semibold text-[#17342f]">{title}</h1>
             <p className="mt-2 text-sm leading-6 text-[#5c6b64]">{subtitle}</p>
             <div className="mt-6">{children}</div>

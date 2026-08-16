@@ -180,17 +180,140 @@ nextjs-portal {
   display: none !important;
 }
 
-/* ---- App theme (settings) ---- */
-[data-theme="warm"] main.exam-grid {
-  background-color: #f3e8d0;
+/* ---- Theme system (settings + quick switcher) ----
+   Token-based: every hard-coded exam palette hex is mapped through a
+   variable so light / warm / dark / ocean / graphite / royal each get a
+   coherent recolor with one shared rule set. */
+
+:root {
+  --t-paper: #f5eddc;
+  --t-grid: #f3e8d0;
+  --t-cream: #fffaf0;
+  --t-cream2: #fffdf7;
+  --t-white: #ffffff;
+  --t-ink: #17342f;
+  --t-ink-text: #17342f;
+  --t-body-text: #66746e;
+  --t-gold-text: #8b6f39;
+  --t-chalk-text: #8b8f88;
+  --t-border: #d8c8a8;
+  --t-border2: #e0c7a4;
+  --t-chip: #e4f0ea;
+  --t-chip-gold: #e8d9b4;
+  --t-chip-rose: #fdf1ea;
+  --t-chip-blue: #e2ecf5;
+  --t-chip-lilac: #ece4f5;
+  --t-link: #2f7151;
+  --t-amber: #e3b65f;
+  --t-amber-hover: #f0c66f;
 }
 
-[data-theme="warm"] [class*="bg-[#fffaf0]"] {
-  background-color: #fbf1dd;
+[data-theme="warm"] {
+  --t-paper: #f6ecd8;
+  --t-grid: #ecd9b6;
+  --t-cream: #fff7e8;
+  --t-cream2: #fff5e0;
+  --t-ink: #24382a;
+  --t-ink-text: #24382a;
+  --t-body-text: #6b6b58;
+  --t-gold-text: #8a6b35;
+  --t-chalk-text: #8b8778;
+  --t-border: #d3c299;
+  --t-border2: #e0cfa9;
+  --t-chip: #ede7d4;
+  --t-chip-gold: #edd9b4;
+  --t-link: #3d6b4f;
+  --t-amber: #dfae4f;
+  --t-amber-hover: #e9bc63;
 }
 
-[data-theme="dark"] main.exam-grid {
-  background-color: #0e1714;
+[data-theme="ocean"] {
+  --t-paper: #eef4fb;
+  --t-grid: #dfe9f4;
+  --t-cream: #f6fafd;
+  --t-cream2: #ffffff;
+  --t-ink: #123052;
+  --t-ink-text: #123052;
+  --t-body-text: #45607c;
+  --t-gold-text: #8a6a30;
+  --t-chalk-text: #7d8fa0;
+  --t-border: #c6d4e3;
+  --t-border2: #d6e2ee;
+  --t-chip: #dceef0;
+  --t-chip-gold: #f1e7cd;
+  --t-chip-rose: #f6e4e6;
+  --t-chip-blue: #e0eaf6;
+  --t-chip-lilac: #e9e6f3;
+  --t-link: #1f6f8f;
+  --t-amber: #cf9f45;
+  --t-amber-hover: #dcae56;
+}
+
+[data-theme="graphite"] {
+  --t-paper: #f3f3f0;
+  --t-grid: #e9e9e4;
+  --t-cream: #f8f8f5;
+  --t-cream2: #ffffff;
+  --t-ink: #22252b;
+  --t-ink-text: #22252b;
+  --t-body-text: #666a73;
+  --t-gold-text: #8a7a52;
+  --t-chalk-text: #6b6e76;
+  --t-border: #dad9d2;
+  --t-border2: #e2e1da;
+  --t-chip: #edece6;
+  --t-chip-gold: #efe5cf;
+  --t-chip-rose: #f3e7e3;
+  --t-chip-blue: #e4e8ef;
+  --t-chip-lilac: #eae7f0;
+  --t-link: #47694b;
+  --t-amber: #c7a34f;
+  --t-amber-hover: #d6b45e;
+}
+
+[data-theme="royal"] {
+  --t-paper: #f3eefb;
+  --t-grid: #e9e1f7;
+  --t-cream: #faf8ff;
+  --t-cream2: #ffffff;
+  --t-ink: #2d1f54;
+  --t-ink-text: #2d1f54;
+  --t-body-text: #6b6091;
+  --t-gold-text: #9a6b3f;
+  --t-chalk-text: #7c7195;
+  --t-border: #ddd3ec;
+  --t-border2: #e6def3;
+  --t-chip: #ece6f8;
+  --t-chip-gold: #f5ecd9;
+  --t-chip-rose: #f7e7ea;
+  --t-chip-blue: #e6e7f6;
+  --t-chip-lilac: #efe9fb;
+  --t-link: #6a4bb3;
+  --t-amber: #c99a4c;
+  --t-amber-hover: #d8ab5c;
+}
+
+[data-theme="dark"] {
+  --t-paper: #0e1714;
+  --t-grid: #0e1714;
+  --t-cream: #131e1a;
+  --t-cream2: #18231f;
+  --t-white: #1b2722;
+  --t-ink: #1e312b;
+  --t-ink-text: #eaf2ed;
+  --t-body-text: #a9bbb1;
+  --t-gold-text: #e6c983;
+  --t-chalk-text: #7f9086;
+  --t-border: #2b3a33;
+  --t-border2: #2b3a33;
+  --t-chip: #223029;
+  --t-chip-gold: #223029;
+  --t-chip-rose: #223029;
+  --t-chip-blue: #223029;
+  --t-chip-lilac: #223029;
+  --t-link: #9fd8b4;
+  --t-amber: #e3b65f;
+  --t-amber-hover: #f0c66f;
 }
 
 [data-theme="dark"] main.exam-grid {
@@ -199,67 +322,261 @@ nextjs-portal {
     linear-gradient(90deg, rgba(214, 235, 226, 0.05) 1px, transparent 1px);
 }
 
-[data-theme="dark"] [class*="bg-[#fffaf0]"] {
-  background-color: #131e1a;
+[data-theme]:not([data-theme="light"]) main.exam-grid {
+  background-color: var(--t-grid);
 }
 
-[data-theme="dark"] [class*="bg-white"] {
-  background-color: #1b2722;
+[data-theme]:not([data-theme="light"]) [class*="bg-[#fffaf0]"] {
+  background-color: var(--t-cream);
 }
 
-[data-theme="dark"] [class*="bg-[#fffdf7]"] {
-  background-color: #18231f;
+[data-theme]:not([data-theme="light"]) [class*="bg-[#fffdf7]"] {
+  background-color: var(--t-cream2);
 }
 
-[data-theme="dark"] [class*="text-[#17342f]"] {
-  color: #eaf2ed;
+[data-theme]:not([data-theme="light"]) [class*="bg-white"] {
+  background-color: var(--t-white);
 }
 
-[data-theme="dark"] [class*="text-[#315149]"],
-[data-theme="dark"] [class*="text-[#34534d]"],
-[data-theme="dark"] [class*="text-[#4f625b]"],
-[data-theme="dark"] [class*="text-[#5b6b63]"],
-[data-theme="dark"] [class*="text-[#5c6b64]"],
-[data-theme="dark"] [class*="text-[#66746e]"],
-[data-theme="dark"] [class*="text-[#6d756f]"],
-[data-theme="dark"] [class*="text-[#6a5d4d]"],
-[data-theme="dark"] [class*="text-[#7c4a2c]"],
-[data-theme="dark"] [class*="text-[#a2532e]"] {
-  color: #a9bbb1;
+[data-theme]:not([data-theme="light"]) [class*="bg-[#f5eddc]"] {
+  background-color: var(--t-paper);
 }
 
-[data-theme="dark"] [class*="text-[#8b6f39]"],
-[data-theme="dark"] [class*="text-[#8b5732]"],
-[data-theme="dark"] [class*="text-[#e3b65f]"] {
-  color: #e6c983;
+[data-theme]:not([data-theme="light"]) [class*="bg-[#e8d9b4]"] {
+  background-color: var(--t-chip-gold);
 }
 
-[data-theme="dark"] [class*="text-[#8b8f88]"] {
-  color: #7f9086;
+[data-theme]:not([data-theme="light"]) [class*="bg-[#fdf1ea]"] {
+  background-color: var(--t-chip-rose);
 }
 
-[data-theme="dark"] [class*="border-[#e3dac6]"],
-[data-theme="dark"] [class*="border-[#d8c8a8]"],
-[data-theme="dark"] [class*="border-[#d7cab0]"],
-[data-theme="dark"] [class*="border-[#bdd3c7]"] {
-  border-color: #2b3a33;
+[data-theme]:not([data-theme="light"]) [class*="text-[#17342f]"] {
+  color: var(--t-ink-text);
 }
 
-[data-theme="dark"] [class*="bg-[#17342f]"]:not([class*="shadow"]) {
-  background-color: #1e312b;
+[data-theme]:not([data-theme="light"]) [class*="text-[#315149]"],
+[data-theme]:not([data-theme="light"]) [class*="text-[#34534d]"],
+[data-theme]:not([data-theme="light"]) [class*="text-[#4f625b]"],
+[data-theme]:not([data-theme="light"]) [class*="text-[#5b6b63]"],
+[data-theme]:not([data-theme="light"]) [class*="text-[#5c6b64]"],
+[data-theme]:not([data-theme="light"]) [class*="text-[#66746e]"],
+[data-theme]:not([data-theme="light"]) [class*="text-[#6d756f]"],
+[data-theme]:not([data-theme="light"]) [class*="text-[#6a5d4d]"],
+[data-theme]:not([data-theme="light"]) [class*="text-[#7c4a2c]"],
+[data-theme]:not([data-theme="light"]) [class*="text-[#a2532e]"] {
+  color: var(--t-body-text);
 }
 
-[data-theme="dark"] [class*="bg-[#e4f0ea]"],
-[data-theme="dark"] [class*="bg-[#eef7ef]"],
-[data-theme="dark"] [class*="bg-[#eff7ef]"],
-[data-theme="dark"] [class*="bg-[#edf7ef]"],
-[data-theme="dark"] [class*="bg-[#f8f0d9]"],
-[data-theme="dark"] [class*="bg-[#f8e5c8]"],
-[data-theme="dark"] [class*="bg-[#f7e3de]"],
-[data-theme="dark"] [class*="bg-[#f8e8e2]"],
-[data-theme="dark"] [class*="bg-[#e2ecf5]"],
-[data-theme="dark"] [class*="bg-[#e0f0e6]"],
-[data-theme="dark"] [class*="bg-[#f7e7d3]"],
-[data-theme="dark"] [class*="bg-[#ece4f5]"] {
-  background-color: #223029;
+[data-theme]:not([data-theme="light"]) [class*="text-[#8b6f39]"],
+[data-theme]:not([data-theme="light"]) [class*="text-[#8b5732]"],
+[data-theme]:not([data-theme="light"]) [class*="text-[#e3b65f]"] {
+  color: var(--t-gold-text);
+}
+
+[data-theme]:not([data-theme="light"]) [class*="text-[#8b8f88]"] {
+  color: var(--t-chalk-text);
+}
+
+[data-theme]:not([data-theme="light"]) [class*="text-[#2f7151]"] {
+  color: var(--t-link);
+}
+
+[data-theme]:not([data-theme="light"]) [class*="border-[#e3dac6]"],
+[data-theme]:not([data-theme="light"]) [class*="border-[#d8c8a8]"],
+[data-theme]:not([data-theme="light"]) [class*="border-[#d7cab0]"],
+[data-theme]:not([data-theme="light"]) [class*="border-[#bdd3c7]"] {
+  border-color: var(--t-border);
+}
+
+[data-theme]:not([data-theme="light"]) [class*="border-[#e0c7a4]"] {
+  border-color: var(--t-border2);
+}
+
+[data-theme]:not([data-theme="light"]) [class*="bg-[#17342f]/5"] {
+  background-color: color-mix(in oklab, var(--t-ink) 5%, transparent);
+}
+
+[data-theme]:not([data-theme="light"]) [class*="bg-[#17342f]/8"] {
+  background-color: color-mix(in oklab, var(--t-ink) 8%, transparent);
+}
+
+[data-theme]:not([data-theme="light"]) [class*="bg-[#17342f]/10"] {
+  background-color: color-mix(in oklab, var(--t-ink) 10%, transparent);
+}
+
+[data-theme]:not([data-theme="light"])
+  [class*="bg-[#17342f]"]:not([class*="/5"]):not([class*="/8"]):not([class*="/10"]) {
+  background-color: var(--t-ink);
+}
+
+[data-theme]:not([data-theme="light"]) [class*="bg-[#e4f0ea]"],
+[data-theme]:not([data-theme="light"]) [class*="bg-[#eef7ef]"],
+[data-theme]:not([data-theme="light"]) [class*="bg-[#eff7ef]"],
+[data-theme]:not([data-theme="light"]) [class*="bg-[#edf7ef]"],
+[data-theme]:not([data-theme="light"]) [class*="bg-[#f8f0d9]"],
+[data-theme]:not([data-theme="light"]) [class*="bg-[#f8e5c8]"],
+[data-theme]:not([data-theme="light"]) [class*="bg-[#f7e3de]"],
+[data-theme]:not([data-theme="light"]) [class*="bg-[#f8e8e2]"],
+[data-theme]:not([data-theme="light"]) [class*="bg-[#e2ecf5]"],
+[data-theme]:not([data-theme="light"]) [class*="bg-[#e0f0e6]"],
+[data-theme]:not([data-theme="light"]) [class*="bg-[#f7e7d3]"],
+[data-theme]:not([data-theme="light"]) [class*="bg-[#ece4f5]"] {
+  background-color: var(--t-chip);
+}
+
+/* ---- Premium motion & surfaces ---- */
+
+@keyframes float-y {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-9px);
+  }
+}
+
+@keyframes glow-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(227, 182, 95, 0);
+  }
+  50% {
+    box-shadow: 0 0 26px 2px rgba(227, 182, 95, 0.35);
+  }
+}
+
+@keyframes gradient-pan {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 200% 50%;
+  }
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-float-y {
+  animation: float-y 7s ease-in-out infinite;
+}
+
+.animate-glow-pulse {
+  animation: glow-pulse 4s ease-in-out infinite;
+}
+
+.animate-pop-in {
+  animation: pop-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Gradient headline text (light surfaces) */
+.text-gradient {
+  background-image: linear-gradient(
+    92deg,
+    var(--t-ink-text),
+    var(--t-link) 46%,
+    var(--t-gold-text) 92%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Gradient accent headline (light surfaces) */
+.text-gradient-accent {
+  background-image: linear-gradient(92deg, var(--t-link), var(--t-gold-text));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Shine sweep on hover for primary CTAs */
+.btn-shine {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.btn-shine::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -70%;
+  height: 100%;
+  width: 45%;
+  background: linear-gradient(105deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+  transform: skewX(-22deg);
+  transition: left 0.55s ease;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.btn-shine:hover::after {
+  left: 130%;
+}
+
+/* Glass card lift */
+.hover-lift {
+  transition:
+    transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.3s ease,
+    background-color 0.3s ease;
+}
+
+.hover-lift:hover {
+  transform: translateY(-4px);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+::selection {
+  background: var(--t-amber);
+  color: var(--t-ink-text);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--t-border) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--t-border);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--t-gold-text);
+  border: 3px solid transparent;
+  background-clip: content-box;
 }
