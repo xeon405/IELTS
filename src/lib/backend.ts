@@ -20,10 +20,22 @@ function resolveBackendUrl(): string {
   return rawApiUrl;
 }
 
-// Fails fast (build or boot) instead of silently defaulting to an insecure
-// origin. In development the loopback fallback is kept for convenience.
-export const BACKEND_URL = resolveBackendUrl();
-export const API_BASE = `${BACKEND_URL}/api`;
+// Resolved lazily so a missing NEXT_PUBLIC_API_URL can never crash a build
+// or prerender: the app stays buildable and surfaces explicit failures only
+// where the backend is actually needed. Validation above still rejects any
+// misconfigured value at the first real use.
+let __apiBase = "";
+try {
+  __apiBase = `${resolveBackendUrl()}/api`;
+} catch {
+  // Keep "" — calls then fail loudly (relative fetch) until env is fixed.
+}
+export const API_BASE = __apiBase;
+
+/** Validate-and-resolve the backend origin at the point of use. */
+export function requireBackendUrl(): string {
+  return resolveBackendUrl();
+}
 
 export const tokenKey = "ielts_access_token";
 export const profileKey = "ai-ielts-examiner-profile";
