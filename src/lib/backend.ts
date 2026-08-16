@@ -110,24 +110,30 @@ async function request<T>(path: string, init: RequestInit = {}, withAuth = true)
 let _healthCache: { at: number; up: boolean } | null = null;
 const HEALTH_TTL_MS = 15_000;
 
-// Render free-tier instances can take ~30-60s to wake from sleep, so the
-// health probe must not give up after a blink — otherwise every feature
-// falls back to stale local data instead of the real backend.
+// Render free-tier instances sleep after ~15 min idle and take ~30-60s to
+// wake, so the health probe must not give up after a blink — otherwise every
+// feature falls back to stale local data instead of the real backend. The
+// first probe itself wakes the instance; retry across a ~70s budget.
 export async function isBackendUp(timeoutMs = 10000): Promise<boolean> {
   const now = Date.now();
   if (_healthCache && now - _healthCache.at < HEALTH_TTL_MS) return _healthCache.up;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const WAKE_BUDGET_MS = 70_000;
+  const attempts = Math.max(1, Math.floor(WAKE_BUDGET_MS / (timeoutMs + 4_000)));
   let up = false;
-  try {
-    const response = await fetch(`${API_BASE}/brain/health`, { signal: controller.signal });
-    up = response.ok;
-  } catch {
-    up = false;
-  } finally {
-    clearTimeout(timer);
-    _healthCache = { at: now, up };
+  for (let attempt = 0; attempt < attempts && !up; attempt++) {
+    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 4_000));
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(`${API_BASE}/brain/health`, { signal: controller.signal });
+      up = response.ok;
+    } catch {
+      up = false;
+    } finally {
+      clearTimeout(timer);
+    }
   }
+  _healthCache = { at: now, up };
   return up;
 }
 
