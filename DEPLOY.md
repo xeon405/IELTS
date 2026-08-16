@@ -2,6 +2,15 @@
 
 Everything needed to put **Mkg.IELTS.COM** on the internet with free accounts, and get it indexed by Google.
 
+## STATUS (2026-08-16)
+
+- Frontend: **LIVE** at https://ielts-master-2026.vercel.app (Vercel, git-connected, auto-deploys on push)
+- Backend: **LIVE** at https://ielts-api-hypc.onrender.com (Render, **Docker** runtime, free plan, auto-deploy on push)
+- Database: Supabase Postgres (shared with local dev DB)
+- Environment: `APP_ENV=production`, all 19 vars set via Render API; JWT_SECRET generated and stored on Render only
+- Tested: 36/36 local regression suite; prod CORS incl. Authorization preflight; security headers on both surfaces
+- OUTSTANDING: Resend domain verification (buy domain, verify, update `RESEND_API_KEY`/`RESEND_FROM`); Google Sign-In authorized origin; Search Console; GitHub Support ticket (optional)
+
 ## Prerequisites (all free)
 
 - GitHub account (already in use: `https://github.com/xeon405/IELTS`)
