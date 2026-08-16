@@ -123,3 +123,6 @@ $RECYCLE.BIN/
 
 # Ideavo specific
 .ideavo/project
+
+.vercel
+.env*

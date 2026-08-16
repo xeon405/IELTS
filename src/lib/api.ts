@@ -114,6 +114,11 @@ async function brainCall<T>(backend: () => Promise<T>, local: () => Promise<T>):
   } catch (error) {
     const status = (error as Error & { status?: number }).status;
     const isNetworkError = !status || status >= 500;
+    // An unauthenticated visitor (401 with no stored token) can't be served
+    // by the backend at all — fall back to the offline brain instead of
+    // surfacing a dead auth error. A 401 WITH a token is a real auth problem
+    // and must surface.
+    if (status === 401 && !getToken()) return local();
     if (!isNetworkError) throw error;
     return local();
   }

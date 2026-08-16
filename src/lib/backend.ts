@@ -98,7 +98,10 @@ async function request<T>(path: string, init: RequestInit = {}, withAuth = true)
 let _healthCache: { at: number; up: boolean } | null = null;
 const HEALTH_TTL_MS = 15_000;
 
-export async function isBackendUp(timeoutMs = 1600): Promise<boolean> {
+// Render free-tier instances can take ~30-60s to wake from sleep, so the
+// health probe must not give up after a blink — otherwise every feature
+// falls back to stale local data instead of the real backend.
+export async function isBackendUp(timeoutMs = 10000): Promise<boolean> {
   const now = Date.now();
   if (_healthCache && now - _healthCache.at < HEALTH_TTL_MS) return _healthCache.up;
   const controller = new AbortController();

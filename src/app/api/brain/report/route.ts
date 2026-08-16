@@ -1,16 +1,1 @@
-import { NextResponse } from "next/server";
-import {
-  buildReport,
-  createDefaultLearningProfile,
-  type StudentLearningProfile,
-} from "@/lib/ielts-brain";
-
-export async function POST(request: Request) {
-  const body = await request.json().catch(() => ({}));
-  const profile = {
-    ...createDefaultLearningProfile(),
-    ...(body.profile && typeof body.profile === "object" ? body.profile : {}),
-  } as StudentLearningProfile;
-
-  return NextResponse.json(buildReport(profile));
-}
+﻿import { NextResponse } from "next/server";import {  buildReport,  createDefaultLearningProfile,  type StudentLearningProfile,} from "@/lib/ielts-brain";export async function POST(request: Request) {  const body = await request.json().catch(() => ({}));  const profile = {    ...createDefaultLearningProfile(),    ...(body.profile && typeof body.profile === "object" ? body.profile : {}),  } as StudentLearningProfile;  return NextResponse.json(buildReport(profile));}
