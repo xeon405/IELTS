@@ -414,6 +414,8 @@ def _subjective_feedback(item: dict, answer: str) -> dict:
         band = _heuristic_writing_band(answer)
         accuracy = round((band / 9) * 100)
         criteria = _writing_criteria(answer, item)
+        speaking_teach = None
+        spot_correction = ""
         logic_default = "State a clear position, support every claim, and check grammar, range and task response."
         tip_default = "Review the section blueprint for structure and scoring criteria."
         suggestions_default = "Rewrite once with the model answer in view, then compare paragraph by paragraph."

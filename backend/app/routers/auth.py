@@ -211,11 +211,12 @@ def _email_configured() -> bool:
 
 def _dev_code_for(delivered: bool, code: str, email: str | None = None) -> str | None:
     """Expose the code on screen ONLY in local development (when email could
-    not be delivered) or for the single beta owner configured in
-    BETA_VERIFY_EMAIL. The owner cannot receive email until real delivery is
-    set up, and this keeps their own account usable while it stays broken.
+    not be delivered) or for the beta owners configured in BETA_VERIFY_EMAIL
+    (comma-separated). Owners cannot receive email until real delivery is
+    set up, and this keeps their own accounts usable while it stays broken.
     Fail-closed: any other account gets nothing."""
-    if settings.BETA_VERIFY_EMAIL and email and email.lower() == settings.BETA_VERIFY_EMAIL.lower():
+    beta = [entry.strip().lower() for entry in (settings.BETA_VERIFY_EMAIL or "").split(",") if entry.strip()]
+    if beta and email and email.lower() in beta:
         return code
     if delivered or not is_dev():
         return None
