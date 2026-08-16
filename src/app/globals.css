@@ -204,6 +204,9 @@ nextjs-portal {
   --t-chip-blue: #e2ecf5;
   --t-chip-lilac: #ece4f5;
   --t-link: #2f7151;
+  --t-info: #295d88;
+  --t-error: #8b3a2a;
+  --t-orange: #c96f1e;
   --t-amber: #e3b65f;
   --t-amber-hover: #f0c66f;
 }
@@ -312,8 +315,15 @@ nextjs-portal {
   --t-chip-blue: #223029;
   --t-chip-lilac: #223029;
   --t-link: #9fd8b4;
+  --t-info: #8cc3e8;
+  --t-error: #f09681;
+  --t-orange: #f0b37a;
   --t-amber: #e3b65f;
   --t-amber-hover: #f0c66f;
+}
+
+[data-theme="dark"] [class*="bg-[#e3b65f]"]:not([class*="/5"]):not([class*="/20"]):not([class*="/25"]):not([class*="/30"]):not([class*="/40"]) {
+  background-color: #8a6a1f;
 }
 
 [data-theme="dark"] main.exam-grid {
@@ -334,8 +344,31 @@ nextjs-portal {
   background-color: var(--t-cream2);
 }
 
-[data-theme]:not([data-theme="light"]) [class*="bg-white"] {
+[data-theme]:not([data-theme="light"])
+  [class*="bg-white"]:not([class*="/10"]):not([class*="/15"]):not([class*="/20"]):not([class*="/25"]):not([class*="/40"]) {
   background-color: var(--t-white);
+}
+
+/* Glass chips over dark hero surfaces stay glassy in every theme so the
+   light text on them never disappears */
+[data-theme]:not([data-theme="light"]) [class*="bg-white/10"] {
+  background-color: color-mix(in oklab, white 10%, transparent);
+}
+
+[data-theme]:not([data-theme="light"]) [class*="bg-white/15"] {
+  background-color: color-mix(in oklab, white 15%, transparent);
+}
+
+[data-theme]:not([data-theme="light"]) [class*="bg-white/20"] {
+  background-color: color-mix(in oklab, white 20%, transparent);
+}
+
+[data-theme]:not([data-theme="light"]) [class*="bg-white/25"] {
+  background-color: color-mix(in oklab, white 25%, transparent);
+}
+
+[data-theme]:not([data-theme="light"]) [class*="bg-white/40"] {
+  background-color: color-mix(in oklab, white 40%, transparent);
 }
 
 [data-theme]:not([data-theme="light"]) [class*="bg-[#f5eddc]"] {
@@ -356,12 +389,16 @@ nextjs-portal {
 
 [data-theme]:not([data-theme="light"]) [class*="text-[#315149]"],
 [data-theme]:not([data-theme="light"]) [class*="text-[#34534d]"],
+[data-theme]:not([data-theme="light"]) [class*="text-[#3f554d]"],
 [data-theme]:not([data-theme="light"]) [class*="text-[#4f625b]"],
 [data-theme]:not([data-theme="light"]) [class*="text-[#5b6b63]"],
 [data-theme]:not([data-theme="light"]) [class*="text-[#5c6b64]"],
+[data-theme]:not([data-theme="light"]) [class*="text-[#5f6c66]"],
+[data-theme]:not([data-theme="light"]) [class*="text-[#65746e]"],
 [data-theme]:not([data-theme="light"]) [class*="text-[#66746e]"],
-[data-theme]:not([data-theme="light"]) [class*="text-[#6d756f]"],
 [data-theme]:not([data-theme="light"]) [class*="text-[#6a5d4d]"],
+[data-theme]:not([data-theme="light"]) [class*="text-[#6d4d2d]"],
+[data-theme]:not([data-theme="light"]) [class*="text-[#6d756f]"],
 [data-theme]:not([data-theme="light"]) [class*="text-[#7c4a2c]"],
 [data-theme]:not([data-theme="light"]) [class*="text-[#a2532e]"] {
   color: var(--t-body-text);
@@ -369,7 +406,13 @@ nextjs-portal {
 
 [data-theme]:not([data-theme="light"]) [class*="text-[#8b6f39]"],
 [data-theme]:not([data-theme="light"]) [class*="text-[#8b5732]"],
-[data-theme]:not([data-theme="light"]) [class*="text-[#e3b65f]"] {
+[data-theme]:not([data-theme="light"]) [class*="text-[#e3b65f]"],
+[data-theme]:not([data-theme="light"]) [class*="text-[#6d5d3a]"],
+[data-theme]:not([data-theme="light"]) [class*="text-[#7a5a12]"],
+[data-theme]:not([data-theme="light"]) [class*="text-[#7a6233]"],
+[data-theme]:not([data-theme="light"]) [class*="text-[#8a6a1f]"],
+[data-theme]:not([data-theme="light"]) [class*="text-[#8a6d3b]"],
+[data-theme]:not([data-theme="light"]) [class*="text-[#a3823c]"] {
   color: var(--t-gold-text);
 }
 
@@ -379,6 +422,29 @@ nextjs-portal {
 
 [data-theme]:not([data-theme="light"]) [class*="text-[#2f7151]"] {
   color: var(--t-link);
+}
+
+[data-theme]:not([data-theme="light"]) [class*="text-[#1f6b47]"],
+[data-theme]:not([data-theme="light"]) [class*="text-[#285f5a]"] {
+  color: var(--t-link);
+}
+
+[data-theme]:not([data-theme="light"]) [class*="text-[#295d88]"],
+[data-theme]:not([data-theme="light"]) [class*="text-[#2f5d8c]"],
+[data-theme]:not([data-theme="light"]) [class*="text-[#0e7490]"] {
+  color: var(--t-info);
+}
+
+[data-theme]:not([data-theme="light"]) [class*="text-[#5c1a17]"],
+[data-theme]:not([data-theme="light"]) [class*="text-[#7c3f3c]"],
+[data-theme]:not([data-theme="light"]) [class*="text-[#8b3a2a]"],
+[data-theme]:not([data-theme="light"]) [class*="text-[#9a3b1f]"],
+[data-theme]:not([data-theme="light"]) [class*="text-[#9c3a2e]"] {
+  color: var(--t-error);
+}
+
+[data-theme]:not([data-theme="light"]) [class*="text-[#c96f1e]"] {
+  color: var(--t-orange);
 }
 
 [data-theme]:not([data-theme="light"]) [class*="border-[#e3dac6]"],
