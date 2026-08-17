@@ -80,7 +80,7 @@ def _normalize(text: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"[.,;:'\"!?()\[\]]", "", text)).strip()
 
 
-band_from_accuracy = bp.band_from_accuracy
+band_from_count = bp.band_from_count
 round_band = bp.round_to_half
 
 
@@ -334,6 +334,32 @@ def compute_timing_metrics(
     }
 
 
+def _match_tolerant(user: str, correct: str) -> bool:
+    """Exact IELTS-style answer match with only harmless tolerance.
+
+    No substring containment ("plan" must never count as "planning").
+    Tolerance is limited to leading articles and trailing plurals, which
+    examiners routinely accept.
+    """
+    if not user or not correct:
+        return False
+    if user == correct:
+        return True
+    u, c = user, correct
+    for prefix in ("the ", "a ", "an "):
+        if u.startswith(prefix) and not c.startswith(prefix):
+            u = u[len(prefix):]
+        elif c.startswith(prefix) and not u.startswith(prefix):
+            c = c[len(prefix):]
+    if u == c:
+        return True
+    if len(u) > 3 and u.endswith("s") and not c.endswith("s") and u[:-1] == c:
+        return True
+    if len(c) > 3 and c.endswith("s") and not u.endswith("s") and c[:-1] == u:
+        return True
+    return False
+
+
 def grade_objective(user_answer: str, correct_answer: str, options: list[str] | None = None) -> tuple[bool, str, float]:
     user = _normalize(user_answer)
     correct = _normalize(correct_answer)
@@ -343,10 +369,10 @@ def grade_objective(user_answer: str, correct_answer: str, options: list[str] | 
         for index, option in enumerate(options):
             if _normalize(option) == user:
                 return _normalize(option) == correct, correct_answer, 1.0 if _normalize(option) == correct else 0.0
-        if user == correct or correct in user or user in correct:
+        if _match_tolerant(user, correct):
             return True, correct_answer, 1.0
         return False, correct_answer, 0.0
-    return user == correct, correct_answer, 1.0 if user == correct else 0.0
+    return _match_tolerant(user, correct), correct_answer, 1.0 if _match_tolerant(user, correct) else 0.0
 
 
 def _writing_criteria(text: str, item: dict) -> list[dict]:
@@ -911,9 +937,12 @@ def evaluate_session(db: Session, user: models.User, profile: models.StudentProf
 
     accuracy = round((total_score / scored) * 100) if scored else 0
     objective_only = [r for r in skill_results if r["type"] in OBJECTIVE_TYPES]
-    objective_accuracy = round((sum(1 for r in objective_only if r["isCorrect"]) / len(objective_only)) * 100) if objective_only else accuracy
+    objective_correct = sum(1 for r in objective_only if r["isCorrect"])
+    objective_accuracy = round((objective_correct / len(objective_only)) * 100) if objective_only else accuracy
 
-    predicted_band = band_from_accuracy(objective_accuracy) if module in ("reading", "listening") else _estimated_subjective_band(skill_results)
+    # Objective skills use the official IELTS raw-score curve (scaled to the
+    # 40-mark paper), never a blunt percentage table.
+    predicted_band = band_from_count(module, objective_correct, len(objective_only)) if module in ("reading", "listening") else _estimated_subjective_band(skill_results)
     predicted_band = round_band(predicted_band)
 
     text_answers = [a for a in answers.values() if (a or "").strip() and len(a.split()) > 20]

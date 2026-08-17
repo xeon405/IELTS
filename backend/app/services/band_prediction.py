@@ -24,15 +24,17 @@ ACCURACY_BANDS: list[tuple[float, float]] = [
     (0, 3.5),
 ]
 
-# Official-style marks-per-section conversion (out of 40).
+# Official-style marks-per-section conversion (out of 40). Both tables are
+# the IELTS-published raw-score -> band curves for Academic Reading and
+# Listening; partial sessions are scaled to the 40-mark equivalent.
 COUNT_BANDS: dict[str, list[tuple[int, float]]] = {
     "reading": [
-        (39, 9.0), (37, 8.5), (33, 8.0), (30, 7.5), (27, 7.0),
-        (23, 6.5), (19, 6.0), (15, 5.5), (13, 5.0), (10, 4.5),
-        (8, 4.0), (6, 3.5), (4, 3.0), (0, 2.5),
+        (39, 9.0), (37, 8.5), (35, 8.0), (33, 7.5), (30, 7.0),
+        (27, 6.5), (23, 6.0), (19, 5.5), (15, 5.0), (13, 4.5),
+        (10, 4.0), (8, 3.5), (6, 3.0), (0, 2.5),
     ],
     "listening": [
-        (39, 9.0), (37, 8.5), (35, 8.0), (32, 7.5), (30, 7.0),
+        (39, 9.0), (37, 8.5), (35, 8.0), (33, 7.5), (30, 7.0),
         (26, 6.5), (23, 6.0), (18, 5.5), (16, 5.0), (13, 4.5),
         (11, 4.0), (10, 3.5), (9, 3.0), (0, 2.5),
     ],
@@ -73,9 +75,15 @@ def band_from_accuracy(accuracy: float) -> float:
 
 
 def band_from_count(skill: str, correct: int, total: int | None = None) -> float:
+    """Band from raw correct count, scaled to the official 40-mark paper.
+
+    Partial sessions (8-40 questions) are projected to the 40-mark
+    equivalent so the result matches the IELTS-published conversion curve the
+    UI advertises, instead of a coarse percentage approximation.
+    """
     table = COUNT_BANDS.get(skill, COUNT_BANDS["reading"])
     if total is not None and total > 0:
-        return band_from_accuracy((correct / total) * 100)
+        correct = round((correct / max(1, total)) * 40)
     for threshold, band in table:
         if correct >= threshold:
             return band

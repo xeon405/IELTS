@@ -167,15 +167,31 @@ def test_recommendation(client, registered_user):
 
 def test_mock_evaluate(client, registered_user):
     token = registered_user["token"]
+    speaking_session = {
+        "id": "mock-speaking-test",
+        "module": "speaking",
+        "mode": "Full Mock",
+        "durationMinutes": 14,
+        "items": [
+            {"id": "lb-speaking-1-0701", "type": "speaking-part1"},
+            {"id": "lb-speaking-2-0601", "type": "speaking-part2"},
+        ],
+    }
     response = client.post("/api/brain/mock", headers=_auth_headers(token), json={
         "profile": {"band": 6.5, "target_band": 7.0},
         "answers": {
-            "mock-speaking-part-1-introduction-interview-personal-questions-1": "My name is Test. I live in a town and I like reading books.",
-            "mock-speaking-part-2-cue-card-describe-something-that-makes-you-happy-1": "Reading makes me happy because it takes me to new worlds.",
+            "lb-speaking-1-0701": "My name is Test. I live in a town and I like reading books.",
+            "lb-speaking-2-0601": "Reading makes me happy because it takes me to new worlds.",
         },
+        "sessions": {"speaking": speaking_session},
     })
     assert response.status_code == 200, response.text
-    assert response.json()["result"]
+    body = response.json()
+    assert body["result"], body
+    # The old bug produced a silent default 5.5 with 0% accuracy for every
+    # section; now the submitted section must carry a real prediction.
+    assert body["result"]["speakingBand"] not in (None, 0)
+    assert body["result"]["accuracy"] > 0
 
 
 def test_tutor_offline_reply(client, registered_user):

@@ -150,6 +150,7 @@ class MockRequest(BaseModel):
     profile: dict[str, Any] | None = None
     answers: dict[str, str] = Field(default_factory=dict)
     timing: dict[str, Any] | None = None
+    sessions: dict[str, Any] | None = None
 
 
 class TutorRequest(BaseModel):

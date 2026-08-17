@@ -192,8 +192,9 @@ def submit_diagnostic(db: Session, user: models.User, profile: models.StudentPro
             results[skill] = {"band": 5.5, "accuracy": 50.0}
             continue
         scores = [ev.evaluate_item(item, answers.get(str(item.get("id")), "")) for item in skill_items]
-        accuracy = round((sum(1 for s in scores if s.get("isCorrect")) / len(scores)) * 100)
-        band = bp.band_from_accuracy(accuracy)
+        correct = sum(1 for s in scores if s.get("isCorrect"))
+        accuracy = round((correct / len(scores)) * 100)
+        band = bp.band_from_count(skill, correct, len(scores))
         if skill in ("writing", "speaking"):
             text = " ".join(answers.get(str(item.get("id")), "") for item in skill_items)
             band = bp.band_from_text(text, skill)

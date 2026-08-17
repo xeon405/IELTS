@@ -2091,7 +2091,7 @@ export function roundToHalf(value: number): number {
 }
 
 export function clampBand(value: number): number {
-  return Math.max(4, Math.min(9, roundToHalf(value)));
+  return Math.max(2.5, Math.min(9, roundToHalf(value)));
 }
 
 export function calculateOverallBand(bands: BandMap): number {
@@ -2351,14 +2351,48 @@ function calculateSessionBand(
   session: PracticeSession,
   answers: Record<string, string>,
 ): number {
-  const baseBand = profile.bands[session.module];
-  const words = answerWordCount(answers);
-  const completion = answerCompletion(session, answers);
-  const detailBonus = Math.min(0.5, words / (session.module === "writing" ? 380 : 160));
-  const completionAdjustment = (completion - 0.75) * 1.2;
-  const difficultyAdjustment = session.difficultyBand >= baseBand + 0.75 ? -0.15 : 0.1;
+  const module = session.module;
+  if (module === "reading" || module === "listening") {
+    // The band must come from what the student actually got right, using the
+    // official IELTS curve — never from mere completion or word volume.
+    const feedback = buildLocalItemFeedback(session, answers);
+    const total = feedback.length;
+    const correct = feedback.filter((item) => item.isCorrect).length;
+    if (total === 0) return profile.bands[module];
+    const difficultyAdjustment = session.difficultyBand >= profile.bands[module] + 0.75 ? -0.1 : 0.1;
+    return clampBand(bandFromCount(module, correct, total) + difficultyAdjustment);
+  }
 
-  return clampBand(baseBand + completionAdjustment + detailBonus + difficultyAdjustment);
+  const text = Object.values(answers)
+    .filter((answer) => answer && answer.trim())
+    .join("\n\n");
+  const stats = analyzeText(text);
+  const words = stats.wordCount;
+  if (module === "writing") {
+    let band = 5.0;
+    if (words >= 250) band += 1.0;
+    else if (words >= 150) band += 0.5;
+    else if (words < 60) band = 3.5;
+    if (stats.averageSentenceWords >= 14) band += 0.5;
+    if (stats.paragraphCount >= 3) band += 0.5;
+    if (stats.uniqueWordRatio >= 55) band += 0.5;
+    else if (stats.uniqueWordRatio < 45) band -= 0.5;
+    return clampBand(band);
+  }
+
+  let band = 5.0;
+  if (words >= 60) band += 1.0;
+  else if (words >= 30) band += 0.5;
+  else band -= 0.5;
+  const linkers = (["because", "however", "therefore", "for example", "although", "despite", "whereas"].filter((word) =>
+    text.toLowerCase().includes(word),
+  )).length;
+  const conditionals = (["if", "would", "could", "should", "might", "may"].filter((word) =>
+    text.toLowerCase().includes(word),
+  )).length;
+  if (linkers >= 2) band += 0.5;
+  if (conditionals >= 1) band += 0.5;
+  return clampBand(band);
 }
 
 function normalizeAnswer(text: string): string {
@@ -2367,6 +2401,46 @@ function normalizeAnswer(text: string): string {
     .replace(/[.,;:'"!?()[\]{}]/g, "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function matchTolerant(user: string, correct: string): boolean {
+  if (!user || !correct) return false;
+  if (user === correct) return true;
+  let u = user;
+  let c = correct;
+  for (const prefix of ["the ", "a ", "an "]) {
+    if (u.startsWith(prefix) && !c.startsWith(prefix)) u = u.slice(prefix.length);
+    else if (c.startsWith(prefix) && !u.startsWith(prefix)) c = c.slice(prefix.length);
+  }
+  if (u === c) return true;
+  if (u.length > 3 && u.endsWith("s") && !c.endsWith("s") && u.slice(0, -1) === c) return true;
+  if (c.length > 3 && c.endsWith("s") && !u.endsWith("s") && c.slice(0, -1) === u) return true;
+  return false;
+}
+
+// Official IELTS raw-score -> band curves (Academic Reading and Listening,
+// out of 40). Partial sessions are scaled to the 40-mark equivalent so the
+// offline brain agrees with the backend and the tables the UI advertises.
+const OFFICIAL_COUNT_BANDS: Record<"reading" | "listening", [number, number][]> = {
+  reading: [
+    [39, 9.0], [37, 8.5], [35, 8.0], [33, 7.5], [30, 7.0], [27, 6.5],
+    [23, 6.0], [19, 5.5], [15, 5.0], [13, 4.5], [10, 4.0], [8, 3.5],
+    [6, 3.0], [0, 2.5],
+  ],
+  listening: [
+    [39, 9.0], [37, 8.5], [35, 8.0], [33, 7.5], [30, 7.0], [26, 6.5],
+    [23, 6.0], [18, 5.5], [16, 5.0], [13, 4.5], [11, 4.0], [10, 3.5],
+    [9, 3.0], [0, 2.5],
+  ],
+};
+
+function bandFromCount(skill: Skill, correct: number, total: number): number {
+  const table = OFFICIAL_COUNT_BANDS[skill === "listening" ? "listening" : "reading"];
+  const scaled = total > 0 ? Math.round((correct / total) * 40) : 0;
+  for (const [threshold, band] of table) {
+    if (scaled >= threshold) return band;
+  }
+  return table[table.length - 1][1];
 }
 
 function findLocalItemById(id: string): PracticeItem | undefined {
@@ -2386,8 +2460,8 @@ function buildLocalItemFeedback(session: PracticeSession, answers: Record<string
     const ideal = (source.correctAnswer ?? "").trim();
     const userNorm = normalizeAnswer(userAnswer);
     const idealNorm = normalizeAnswer(ideal);
-    const optionMatch = item.options?.some((option) => normalizeAnswer(option) === userNorm);
-    const isCorrect = Boolean(userNorm && (userNorm === idealNorm || (optionMatch && userNorm === idealNorm) || (idealNorm && (userNorm.includes(idealNorm) || idealNorm.includes(userNorm)))));
+    const optionMatched = Boolean(item.options?.some((option) => normalizeAnswer(option) === userNorm));
+    const isCorrect = Boolean(userNorm && (matchTolerant(userNorm, idealNorm) || (optionMatched && matchTolerant(userNorm, idealNorm))));
     return {
       id: item.id,
       type: item.type,
@@ -2416,7 +2490,13 @@ export function evaluatePracticeSession(
 ): { evaluation: EvaluationResult; updatedProfile: StudentLearningProfile } {
   const timingResult = computeTimingMetrics(session.module, session.items.length, answers, session.durationMinutes, timingSeconds);
   const predictedBand = calculateSessionBand(profile, session, answers);
-  const accuracy = Math.round(Math.max(35, Math.min(96, answerCompletion(session, answers) * 70 + predictedBand * 4)));
+  const feedback = buildLocalItemFeedback(session, answers);
+  const totalItems = feedback.length;
+  const correctItems = feedback.filter((item) => item.isCorrect).length;
+  const accuracy =
+    session.module === "writing" || session.module === "speaking"
+      ? Math.round((predictedBand / 9) * 100)
+      : Math.round((correctItems / Math.max(1, totalItems)) * 100);
   const weaknesses = detectWeaknesses(session, answers);
   const strengths = detectStrengths(session, answers);
   const oldBand = profile.bands[session.module];
@@ -2497,11 +2577,13 @@ export function evaluateMockExam(
   profile: StudentLearningProfile,
   answers: Record<string, string>,
   timing?: Partial<Record<Skill, number>>,
+  sections?: Partial<Record<Skill, PracticeSession>>,
 ): { result: MockExamResult; updatedProfile: StudentLearningProfile } {
+  const mockSkills: Skill[] = ["listening", "reading", "writing", "speaking"];
   const sectionTiming: Record<string, TimingDetail> = {};
   const speedScores: number[] = [];
   const tmScores: number[] = [];
-  (["listening", "reading", "writing", "speaking"] as Skill[]).forEach((skill) => {
+  mockSkills.forEach((skill) => {
     const installed = skill === "speaking" ? 20 : skill === "writing" ? 2 : 40;
     const metrics = computeTimingMetrics(skill, installed, answers, OFFICIAL_SECTION_MINUTES[skill], timing?.[skill]);
     sectionTiming[skill] = metrics.timing;
@@ -2512,26 +2594,75 @@ export function evaluateMockExam(
   const overallTm = Math.round(tmScores.reduce((sum, score) => sum + score, 0) / tmScores.length);
   const answerVolume = answerWordCount(answers);
   const answeredItems = Object.values(answers).filter((answer) => answer.trim()).length;
-  const staminaAdjustment = answeredItems > 25 ? 0.25 : answeredItems > 10 ? 0 : -0.5;
-  const writingAdjustment = answerVolume > 420 ? 0.25 : answerVolume > 180 ? 0 : -0.5;
-  const speakingAdjustment = Object.keys(answers).some((key) => key.startsWith("speaking")) ? 0.25 : -0.25;
 
-  const listeningBand = clampBand(profile.bands.listening + staminaAdjustment);
-  const readingBand = clampBand(profile.bands.reading + staminaAdjustment);
-  const writingBand = clampBand(profile.bands.writing + writingAdjustment);
-  const speakingBand = clampBand(profile.bands.speaking + speakingAdjustment);
-  const bands: BandMap = {
-    listening: listeningBand,
-    reading: readingBand,
-    writing: writingBand,
-    speaking: speakingBand,
-  };
+  const sectionBands: BandMap = { ...profile.bands };
+  const sectionAccuracy: Partial<Record<Skill, number>> = {};
+  const sectionCorrect: Partial<Record<Skill, number>> = {};
+  const hasSections = sections && Object.keys(sections).length > 0;
+
+  if (hasSections) {
+    // Offline grading with the real paper: per-section accuracy comes from
+    // the answer keys, and bands use the official IELTS curve per section.
+    mockSkills.forEach((skill) => {
+      const session = sections![skill];
+      if (!session || !session.items?.length) return;
+      const feedback = buildLocalItemFeedback(session, answers);
+      const total = feedback.length;
+      const correct = feedback.filter((item) => item.isCorrect).length;
+      sectionCorrect[skill] = correct;
+      sectionAccuracy[skill] = Math.round((correct / total) * 100);
+      if (skill === "reading" || skill === "listening") {
+        sectionBands[skill] = clampBand(bandFromCount(skill, correct, total));
+      } else {
+        const text = session.items
+          .map((item) => answers[item.id])
+          .filter((answer): answer is string => Boolean(answer && answer.trim()))
+          .join("\n\n");
+        const words = analyzeText(text).wordCount;
+        if (skill === "writing") {
+          let band = 5.0;
+          if (words >= 250) band += 1.0;
+          else if (words >= 150) band += 0.5;
+          else if (words < 60) band = 3.5;
+          const stats = analyzeText(text);
+          if (stats.averageSentenceWords >= 14) band += 0.5;
+          if (stats.paragraphCount >= 3) band += 0.5;
+          if (stats.uniqueWordRatio >= 55) band += 0.5;
+          else if (stats.uniqueWordRatio < 45) band -= 0.5;
+          sectionBands[skill] = clampBand(band);
+        } else {
+          let band = 5.0;
+          if (words >= 60) band += 1.0;
+          else if (words >= 30) band += 0.5;
+          else band -= 0.5;
+          const linkers = (["because", "however", "therefore", "for example", "although", "despite", "whereas"].filter((word) =>
+            text.toLowerCase().includes(word),
+          )).length;
+          const conditionals = (["if", "would", "could", "should", "might", "may"].filter((word) =>
+            text.toLowerCase().includes(word),
+          )).length;
+          if (linkers >= 2) band += 0.5;
+          if (conditionals >= 1) band += 0.5;
+          sectionBands[skill] = clampBand(band);
+        }
+      }
+    });
+  } else {
+    // No paper available offline: bands must NOT be fabricated from
+    // participation. Keep profile bands and say so explicitly.
+    const noData: Partial<Record<Skill, number>> = {};
+    mockSkills.forEach((skill) => {
+      noData[skill] = undefined;
+    });
+    Object.assign(sectionAccuracy, noData);
+  }
+
+  const bands: BandMap = sectionBands;
   const overallBand = calculateOverallBand(bands);
 
   const sortedBands = (Object.entries(bands) as [Skill, number][]).sort((a, b) => b[1] - a[1]);
   const [bestSkill, bestBand] = sortedBands[0];
   const [worstSkill, worstBand] = sortedBands[sortedBands.length - 1];
-  const mockSkills: Skill[] = ["listening", "reading", "writing", "speaking"];
 
   const strengths = new Set<string>();
   strengths.add(`${skillLabels[bestSkill]} at ${bestBand.toFixed(1)} was your highest section band this mock.`);
@@ -2561,15 +2692,39 @@ export function evaluateMockExam(
   if (!sortedBands.some(([, band]) => band >= profile.targetBand)) {
     weaknesses.add(`No section reached your ${profile.targetBand.toFixed(1)} target this mock.`);
   }
+  if (!hasSections) {
+    weaknesses.add("Offline mode: section answer keys were unavailable, so bands reflect your profile rather than this attempt. Connect the backend for band-accurate results.");
+  }
+
+  const sectionFeedback: Record<Skill, string> = {
+    listening: sectionAccuracy.listening !== undefined
+      ? `Listening: ${sectionAccuracy.listening}% correct, estimated band ${bands.listening.toFixed(1)}.`
+      : "Listening answers could not be graded offline against the paper.",
+    reading: sectionAccuracy.reading !== undefined
+      ? `Reading: ${sectionAccuracy.reading}% correct, estimated band ${bands.reading.toFixed(1)}.`
+      : "Reading answers could not be graded offline against the paper.",
+    writing: sectionAccuracy.writing !== undefined
+      ? `Writing: text-length and criteria heuristics put your answer at band ${bands.writing.toFixed(1)}.`
+      : "Writing answers could not be graded offline against the paper.",
+    speaking: sectionAccuracy.speaking !== undefined
+      ? `Speaking: response length and language signals put your answers at band ${bands.speaking.toFixed(1)}.`
+      : "Speaking answers could not be graded offline against the paper.",
+  };
+  const accuracySections = mockSkills
+    .map((skill) => sectionAccuracy[skill])
+    .filter((value): value is number => value !== undefined);
+  const overallAccuracy = accuracySections.length
+    ? Math.round(accuracySections.reduce((sum, value) => sum + value, 0) / accuracySections.length)
+    : Math.round((overallBand / 9) * 100);
 
   const result: MockExamResult = {
     id: `mock-${Date.now()}`,
-    listeningBand,
-    readingBand,
-    writingBand,
-    speakingBand,
+    listeningBand: bands.listening,
+    readingBand: bands.reading,
+    writingBand: bands.writing,
+    speakingBand: bands.speaking,
     overallBand,
-    accuracy: Math.round((overallBand / 9) * 100),
+    accuracy: overallAccuracy,
     speed: {
       score: overallSpeed,
       label: overallSpeed >= 75 ? "Fast" : overallSpeed >= 45 ? "Balanced" : "Slow",
@@ -2581,12 +2736,7 @@ export function evaluateMockExam(
       comment: "Compare each section's time taken against its official limit (L 30 / R 60 / W 60 / S 14 minutes).",
     },
     timing: sectionTiming,
-    sectionFeedback: {
-      listening: "Good general comprehension; still needs faster recovery when options are corrected mid-audio.",
-      reading: "Main ideas are stable, but heading and inference items need stronger evidence checking.",
-      writing: "Task response is clear; progression and complex grammar limit Band 7 consistency.",
-      speaking: "Personal examples support fluency; Part 3 answers need more abstract development.",
-    },
+    sectionFeedback,
     improvementPlan: [
       "Spend two sessions on the lowest band skill before another full mock.",
       "Review all wrong or uncertain items by question type, not by topic only.",
@@ -2606,11 +2756,11 @@ export function evaluateMockExam(
         id: result.id,
         date: dateLabel,
         overallBand,
-        listeningBand,
-        readingBand,
-        writingBand,
-        speakingBand,
-        summary: "Computer-delivered mock completed with AI examiner report.",
+        listeningBand: bands.listening,
+        readingBand: bands.reading,
+        writingBand: bands.writing,
+        speakingBand: bands.speaking,
+        summary: hasSections ? "Computer-delivered mock completed with answer-key grading." : "Mock completed offline; bands reflect the profile because the paper could not be graded.",
       },
       ...profile.mockHistory,
     ].slice(0, 5),
@@ -2622,10 +2772,10 @@ export function evaluateMockExam(
       {
         label: "Mock",
         overall: overallBand,
-        reading: readingBand,
-        listening: listeningBand,
-        writing: writingBand,
-        speaking: speakingBand,
+        reading: bands.reading,
+        listening: bands.listening,
+        writing: bands.writing,
+        speaking: bands.speaking,
       },
     ],
   };

@@ -91,6 +91,14 @@ def _bank_lookup_for(module: str) -> dict[str, dict]:
                         lookup[f"mock-reading-{slug_label}-p{passage}-{index + 1}"] = copy
                 else:
                     lookup[base] = copy
+                # Keep the authored (original) id resolvable as well - mock
+                # listening/reading re-stamp ids per section/passage but
+                # speaking/writing papers keep the bank's authored ids.
+                original = str(item.get("id") or "")
+                if original and original != base:
+                    keep = dict(copy)
+                    keep["id"] = original
+                    lookup[original] = keep
         _BANK_LOOKUP[module] = lookup
     return _BANK_LOOKUP[module]
 
@@ -568,14 +576,35 @@ def mock(payload: MockRequest, _: None = Depends(_BRAIN_AI_LIMIT), user: models.
             "updatedProfile": _profile_dict(db, user, profile),
             "questions": {},
         }
+    # Grade each submitted section against the ACTUAL paper the student sat
+    # (the frontend echoes each /mockexam section back through /brain/evaluate
+    # already; this batch endpoint accepts the same per-skill sessions). The
+    # client-supplied item bodies are never trusted — ids resolve to the
+    # authoritative banks/stores via _session_with_answers, so a mock can no
+    # longer be graded against freshly-generated unrelated questions (and the
+    # AI token budget is not burned on pointless regeneration).
+    sessions = payload.sessions or {}
     section_results: dict[str, dict] = {}
     questions: dict[str, Any] = {}
     for skill in SKILLS:
-        full = orchestrator.generate_session(db, user, profile, skill, "Question by Question", 3)
-        questions[skill] = full
-        stored = _session_with_answers(db, user.id, full)
-        result = ev.evaluate_session(db, user, profile, stored, payload.answers)
+        session_data = _session_with_answers(db, user.id, sessions.get(skill))
+        if session_data is None:
+            continue
+        questions[skill] = session_data
+        result = ev.evaluate_session(
+            db,
+            user,
+            profile,
+            session_data,
+            payload.answers,
+            timing=(payload.timing or {}).get(skill),
+        )
         section_results[skill] = result
+    if not section_results:
+        raise HTTPException(
+            status_code=400,
+            detail="The mock sections could not be resolved server-side. Submit each section from the app instead.",
+        )
     result = ev.build_mock_result(db, user, profile, section_results, answers=payload.answers, timing=payload.timing)
     adaptive.recompute_profile(db, profile)
     updated = _profile_dict(db, user, profile)

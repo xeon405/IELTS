@@ -186,11 +186,12 @@ export const brainApi = {
   mock(
     profile: StudentLearningProfile,
     answers: Record<string, string>,
+    sessions?: Partial<Record<Skill, PracticeSession>>,
     timing?: Partial<Record<string, { totalSeconds?: number }>>,
   ): Promise<MockResponse> {
     return brainCall(
-      () => backendFetch<MockResponse>("/brain/mock", { profile, answers, timing }),
-      () => postJSON<MockResponse>("/api/brain/mock", { profile, answers, timing }),
+      () => backendFetch<MockResponse>("/brain/mock", { profile, answers, sessions, timing }),
+      () => postJSON<MockResponse>("/api/brain/mock", { profile, answers, sessions, timing }),
     );
   },
   mockPaper(profile: StudentLearningProfile, set: number): Promise<{ paper: PracticalMockPaper; count: number }> {
