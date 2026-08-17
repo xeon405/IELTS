@@ -1073,14 +1073,12 @@ def evaluate_session(db: Session, user: models.User, profile: models.StudentProf
             agreement = gemini_data.get("agreement")
             confidence = gemini_data.get("confidence")
     elif module in ("reading", "listening") and scored:
-        # Hybrid evaluation: the objective accuracy is authoritative, and the
-        # AI examiner panel confirms the band and explains the result.
+        # The official raw-score curve is authoritative for objective skills,
+        # exactly like the real exam's right/wrong marking: the AI panel may
+        # explain the result, but it must never move the band.
         gemini_data = _gemini_objective_estimate(module, accuracy, objective_accuracy, wrong_by_type, skill_results)
         if gemini_data:
             ai_band = round_band(float(gemini_data.get("band", predicted_band)))
-            blend = round_band(0.5 * predicted_band + 0.5 * ai_band)
-            predicted_band = blend
-            accuracy = round((predicted_band / 9) * 100)
             agreement = 100 - round(abs(predicted_band - ai_band) * 40)
             confidence = round(max(50, min(100, agreement)))
 

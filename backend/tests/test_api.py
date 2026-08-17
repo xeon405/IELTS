@@ -194,6 +194,38 @@ def test_mock_evaluate(client, registered_user):
     assert body["result"]["accuracy"] > 0
 
 
+def test_ai_cannot_move_objective_band(client, registered_user, monkeypatch):
+    """Reading/listening bands come from the official raw-score curve ONLY:
+    even a wrong AI estimate (9.0 for a 0/3 session) must not move the band."""
+    from app.services import evaluation_service as ev
+
+    token = registered_user["token"]
+    bank = client.post("/api/brain/bank", headers=_auth_headers(token), json={
+        "session": {"module": "reading", "mode": "True / False / Not Given", "questionType": "True / False / Not Given", "questionCount": 3}
+    }).json()["session"]
+    answers = {item["id"]: "zzz" for item in bank["items"]}
+
+    monkeypatch.setattr(ev, "_gemini_objective_estimate", lambda *a, **k: {
+        "band": 9.0,
+        "summary": "AI panel thinks this was excellent.",
+        "strengths": ["AI strength"],
+        "weaknesses": [],
+        "bandDescriptorNotes": [],
+    })
+
+    response = client.post("/api/brain/evaluate", headers=_auth_headers(token), json={
+        "profile": {"band": 6.5, "target_band": 7.0},
+        "session": {"id": bank["id"], "module": "reading", "mode": "True / False / Not Given", "items": [{"id": item["id"]} for item in bank["items"]]},
+        "answers": answers,
+    })
+    assert response.status_code == 200, response.text
+    body = response.json()
+    result = body.get("evaluation") or body.get("result") or {}
+    assert result["predictedBand"] == 2.5, result.get("predictedBand")
+    assert result["accuracy"] == 0, result.get("accuracy")
+    assert result["examinerSummary"] == "AI panel thinks this was excellent.", result.get("examinerSummary")
+
+
 def test_tutor_offline_reply(client, registered_user):
     response = client.post("/api/brain/tutor", headers=_auth_headers(registered_user["token"]), json={
         "question": "How can I improve my reading speed for True/False/Not Given?",
