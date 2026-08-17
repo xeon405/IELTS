@@ -1,18 +1,21 @@
-name: Keep Render backend awake
+name: keepalive
 
+# Render free-tier web services sleep after ~15 minutes of no inbound
+# traffic and take 30-60s to wake, which the client perceives as "the whole
+# site is slow". This job pings the backend, the Vercel proxy and the site
+# every 4 minutes so the instance stays warm around the clock.
 on:
   schedule:
-    - cron: "*/5 * * * *"
-  workflow_dispatch:
-
-permissions:
-  actions: read
+    - cron: "*/4 * * * *"
+  workflow_dispatch: {}
 
 jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping backend health endpoint
-        run: |
-          curl -fsS -o /dev/null -w "backend health: %{http_code} (%{time_total}s)\n" \
-            https://ielts-api-hypc.onrender.com/health || echo "backend not responding (will retry next run)"
+      - name: wake Render backend
+        run: curl -fsS -o /dev/null -w "render:%{http_code} %{time_total}s\n" https://ielts-api-hypc.onrender.com/health
+      - name: wake Vercel proxy
+        run: curl -fsS -o /dev/null -w "proxy:%{http_code} %{time_total}s\n" https://ielts-master-2026.vercel.app/api/brain/health || true
+      - name: wake site
+        run: curl -fsS -o /dev/null -w "site:%{http_code} %{time_total}s\n" https://ielts-master-2026.vercel.app/

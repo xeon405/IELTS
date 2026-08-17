@@ -39,6 +39,21 @@ async def _db_keepalive(stop: asyncio.Event):
             pass
 
 
+async def _warm_db_pool() -> None:
+    """Open a few pooled connections at boot so the first real request does
+    not pay for pooler/DNS/TLS setup on a cold instance (Render free tier
+    sleeps the instance; every wake starts from zero)."""
+    if active_dialect() != "postgresql":
+        return
+    loop = asyncio.get_running_loop()
+
+    def _warm_one() -> None:
+        with engine.connect() as conn:
+            conn.exec_driver_sql("SELECT 1")
+
+    await asyncio.gather(*(asyncio.to_thread(_warm_one) for _ in range(3)), return_exceptions=True)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Always refuse to run with an empty or default signing secret. A hardcoded
@@ -80,6 +95,7 @@ async def lifespan(app: FastAPI):
                 for clause in alterations:
                     conn.exec_driver_sql(f"ALTER TABLE users {clause}")
     logger.info("startup complete (database=%s)", active_dialect())
+    await _warm_db_pool()
     stop = asyncio.Event()
     wake = asyncio.create_task(_db_keepalive(stop))
     try:

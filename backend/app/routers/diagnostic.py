@@ -9,6 +9,7 @@ from ..deps import get_current_user, get_or_create_profile
 from ..schemas import DiagnosticSubmitRequest
 from ..services import diagnostic_service
 from ..services.adaptive import serialize_profile
+from ..services.me_cache import invalidate as me_cache_invalidate
 from ..services.ratelimit import rate_limit
 
 router = APIRouter(prefix="/diagnostic", tags=["diagnostic"])
@@ -40,4 +41,5 @@ def submit(payload: DiagnosticSubmitRequest, _: None = Depends(_DIAG_AI_LIMIT), 
     if test is None:
         raise HTTPException(status_code=404, detail="No diagnostic found")
     result = diagnostic_service.submit_diagnostic(db, user, profile, test, payload.answers)
+    me_cache_invalidate(user.id)
     return {"result": result, "profile": serialize_profile(db, profile)}

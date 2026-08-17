@@ -24,6 +24,7 @@ from ..services import large_bank as lb
 from ..services import orchestrator
 from ..services import recommendation
 from ..services import tts_service
+from ..services.me_cache import invalidate as me_cache_invalidate
 from ..services.ratelimit import rate_limit
 
 # AI-generation endpoints burn real money/time (LLM + Whisper + TTS calls).
@@ -210,6 +211,7 @@ def evaluate(payload: SessionRequest, _: None = Depends(_BRAIN_AI_LIMIT), user: 
         raise HTTPException(status_code=404, detail="This session could not be found. Submit the section for a full report instead.")
     result = ev.evaluate_session(db, user, profile, session_data, payload.answers, timing=payload.timing)
     adaptive.recompute_profile(db, profile)
+    me_cache_invalidate(user.id)
     updated = _profile_dict(db, user, profile)
     return {"evaluation": result, "updatedProfile": updated, "itemFeedback": result.get("perItemFeedback", [])}
 
@@ -607,6 +609,7 @@ def mock(payload: MockRequest, _: None = Depends(_BRAIN_AI_LIMIT), user: models.
         )
     result = ev.build_mock_result(db, user, profile, section_results, answers=payload.answers, timing=payload.timing)
     adaptive.recompute_profile(db, profile)
+    me_cache_invalidate(user.id)
     updated = _profile_dict(db, user, profile)
     return {"result": result, "updatedProfile": updated, "questions": questions}
 
@@ -790,6 +793,7 @@ def update_profile(payload: OnboardingUpdate, user: models.User = Depends(get_cu
     if payload.target_band is not None:
         profile.target_band = float(payload.target_band)
     db.commit()
+    me_cache_invalidate(user.id)
     return _profile_dict(db, user, profile)
 
 
@@ -804,6 +808,7 @@ def update_settings(payload: SettingsUpdate, user: models.User = Depends(get_cur
         if hasattr(row, key) and value is not None:
             setattr(row, key, value)
     db.commit()
+    me_cache_invalidate(user.id)
     return {
         "theme": row.theme,
         "notifications_enabled": row.notifications_enabled,

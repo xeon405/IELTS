@@ -99,8 +99,10 @@ export function PracticeModule({
   useEffect(() => {
     let cancelled = false;
     setBlueprintLoading(true);
-    fetch(`/api/brain/blueprints?module=${module}`)
-      .then((response) => response.json())
+    // Call the backend directly (same route as every other brain call):
+    // the Vercel proxy adds a hop + cold start for no benefit here.
+    brainApi
+      .blueprints(module)
       .then((data: BlueprintMeta[]) => {
         if (cancelled) return;
         setBlueprints(data && data.length > 0 ? data : getBlueprintMeta(module));

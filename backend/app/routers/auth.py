@@ -34,6 +34,9 @@ from ..schemas import (
 )
 from ..security import create_access_token, hash_password, verify_password
 from ..services.adaptive import serialize_profile
+from ..services.me_cache import invalidate as me_cache_invalidate
+from ..services.me_cache import get as me_cache_get
+from ..services.me_cache import set as me_cache_set
 from ..services.ratelimit import rate_limit
 
 logger = logging.getLogger("uvicorn.error")
@@ -390,8 +393,16 @@ def login(
 
 @router.get("/me", response_model=AuthResponse)
 def me(user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    cached = me_cache_get(user.id)
+    if cached is not None:
+        # Re-mint the token so password changes/token_version bumps are
+        # honoured even while the heavy payload is served from cache.
+        cached["access_token"] = create_access_token(str(user.id), int(user.token_version or 0))
+        return AuthResponse(**cached)
     profile = get_or_create_profile(db, user)
-    return _auth_payload(db, user, first_login=False)
+    payload = _auth_payload(db, user, first_login=False).model_dump()
+    me_cache_set(user.id, payload)
+    return AuthResponse(**payload)
 
 
 @router.post("/forgot-password", response_model=ForgotResponse)
@@ -449,6 +460,7 @@ def reset_password(
     user.token_version = int(user.token_version or 0) + 1
     row.used = True
     db.commit()
+    me_cache_invalidate(user.id)
     return ResetResponse()
 
 
@@ -457,4 +469,5 @@ def logout(user: models.User = Depends(get_current_user), db: Session = Depends(
     """Revoke all of this user's tokens by bumping their token version."""
     user.token_version = int(user.token_version or 0) + 1
     db.commit()
+    me_cache_invalidate(user.id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
