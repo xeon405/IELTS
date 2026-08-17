@@ -92,10 +92,22 @@ def _split_keys(value: str) -> list[str]:
 
 
 def groq_keys() -> list[str]:
-    """All configured Groq keys: explicit pool first, single key as fallback."""
+    """All configured Groq keys: explicit pool first, single key as fallback.
+
+    Legacy numbered env vars (GROQ_API_KEY_2 ... GROQ_API_KEY_10) are merged
+    into the pool too, so deployments that predate the GROQ_API_KEYS setting
+    keep using every key they already carry.
+    """
     keys = _split_keys(settings.GROQ_API_KEYS)
-    if not keys and settings.GROQ_API_KEY.strip():
+    if not keys:
         keys = _split_keys(settings.GROQ_API_KEY)
+    seen = set(keys)
+    for index in range(2, 11):
+        legacy = str(getattr(settings, f"GROQ_API_KEY_{index}", "") or "")
+        for key in _split_keys(legacy):
+            if key and key not in seen:
+                seen.add(key)
+                keys.append(key)
     return keys
 
 
