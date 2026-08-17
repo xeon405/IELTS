@@ -27,9 +27,15 @@ _LAST_CALL_TS = 0.0
 
 
 def _throttle() -> None:
-    """Space out outgoing AI calls so bursty sessions stay under provider RPM limits."""
+    """Space out outgoing AI calls so bursty sessions stay under provider RPM limits.
+
+    Provider rate limits apply per API key, so a larger key pool shrinks the
+    global spacing: 10 keys spread over a 1.2s window mean ~0.12s apart, which
+    keeps full-mock scoring fast while each individual key stays under quota.
+    """
     global _LAST_CALL_TS
-    interval = max(0.0, float(settings.AI_MIN_INTERVAL_SECONDS))
+    pool = max(1, len(groq_keys()))
+    interval = max(0.1, float(settings.AI_MIN_INTERVAL_SECONDS) / pool)
     with _RATE_LOCK:
         wait = _LAST_CALL_TS + interval - time.monotonic()
         if wait > 0:

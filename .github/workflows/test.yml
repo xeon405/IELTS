@@ -20,3 +20,16 @@ jobs:
       - name: Run API regression suite
         working-directory: backend
         run: python -m pytest tests -q --tb=short
+
+  parity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Verify TS mirror matches Python grading
+        run: node scripts/ts-parity-check.cjs

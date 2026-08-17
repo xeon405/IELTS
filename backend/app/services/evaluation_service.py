@@ -121,14 +121,6 @@ def analyze_text(text: str) -> dict:
     }
 
 
-def _heuristic_writing_band(text: str) -> float:
-    return bp.band_from_text(text, "writing")
-
-
-def _heuristic_speaking_band(text: str) -> float:
-    return bp.band_from_text(text, "speaking")
-
-
 FILLERS = {
     "umm", "um", "uh", "er", "eh", "ah", "hmm", "hm", "huh", "mm", "ahem",
 }
@@ -961,45 +953,6 @@ def _merge_insights(judges: list[dict], key: str) -> list[str]:
     return merged[:6]
 
 
-def _gemini_objective_estimate(
-    module: str,
-    accuracy: int,
-    objective_accuracy: int,
-    wrong_by_type: dict[str, int],
-    skill_results: list[dict],
-) -> dict | None:
-    """AI examiner pass for objective skills (reading/listening) that blends
-    the measured accuracy with a human-style band estimate and feedback."""
-    if not gemini.is_gemini_available():
-        return None
-    wrong_types = ", ".join(f"{t} ({c})" for t, c in sorted(wrong_by_type.items(), key=lambda kv: -kv[1])) or "none"
-    prompt_block = f"""You are an IELTS examiner. Evaluate a completed IELTS {module} practice session scored objectively.
-
-Session performance:
-- Overall accuracy: {accuracy}%
-- Objective question accuracy: {objective_accuracy}%
-- Question types with errors: {wrong_by_type or 'none'}
-- Questions attempted: {len(skill_results)}
-
-The objective score is authoritative. Your job is to confirm or refine the band and
-explain WHY the student performed this way so they can improve.
-
-Return ONLY JSON, no prose, with keys:
-{{"band": number, "summary": "2-3 sentence examiner summary", "strengths": ["..."], "weaknesses": ["..."], "nextPlan": ["..."], "bandDescriptorNotes": ["..."]}}
-Band must be a half-band number between 3.5 and 9.0, and should stay close to the objective accuracy (e.g. 65% object accuracy ≈ Band 6.0)."""
-    try:
-        data = gemini.generate_json(prompt_block, system_instruction="You are a strict but fair IELTS examiner. Output valid JSON only.")
-        if not isinstance(data, dict) or not data.get("band"):
-            return None
-        data["band"] = float(data["band"])
-        for key in ("strengths", "weaknesses", "nextPlan", "bandDescriptorNotes"):
-            if not isinstance(data.get(key), list):
-                data[key] = [str(data.get(key, ""))]
-        return data
-    except Exception:
-        return None
-
-
 def evaluate_session(db: Session, user: models.User, profile: models.StudentProfile, session_data: dict, answers: dict[str, str], timing: dict | None = None) -> dict:
     module = str(session_data.get("module") or "reading")
     items = session_data.get("items") or []
@@ -1057,6 +1010,10 @@ def evaluate_session(db: Session, user: models.User, profile: models.StudentProf
     predicted_band = round_band(predicted_band)
 
     text_answers = [a for a in answers.values() if (a or "").strip() and len(a.split()) > 20]
+
+    # Reading/listening are decided by the official raw-score curve above:
+    # no AI call is made for them (saving latency and quota), exactly like the
+    # real exam's right/wrong marking. Only subjective skills ask the AI panel.
     gemini_data = None
     judges: list[dict] = []
     agreement: int | None = None
@@ -1072,15 +1029,6 @@ def evaluate_session(db: Session, user: models.User, profile: models.StudentProf
             judges = gemini_data.get("judges") or []
             agreement = gemini_data.get("agreement")
             confidence = gemini_data.get("confidence")
-    elif module in ("reading", "listening") and scored:
-        # The official raw-score curve is authoritative for objective skills,
-        # exactly like the real exam's right/wrong marking: the AI panel may
-        # explain the result, but it must never move the band.
-        gemini_data = _gemini_objective_estimate(module, accuracy, objective_accuracy, wrong_by_type, skill_results)
-        if gemini_data:
-            ai_band = round_band(float(gemini_data.get("band", predicted_band)))
-            agreement = 100 - round(abs(predicted_band - ai_band) * 40)
-            confidence = round(max(50, min(100, agreement)))
 
     strengths: list[str] = []
     weaknesses: list[str] = []

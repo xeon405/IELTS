@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
+// Run this proxy in Portland - geographically closest Vercel region to
+// Render's Oregon backend, shaving round-trip latency on every API call.
+export const config = { region: "pdx1" };
+
 // Server-side proxy: the app calls relative /api/brain/* paths when its
 // direct-backend calls fall back (e.g. Render free-tier cold starts, or
 // endpoints with no local route handler like /check and /vocab). Requests

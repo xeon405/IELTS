@@ -194,9 +194,9 @@ def test_mock_evaluate(client, registered_user):
     assert body["result"]["accuracy"] > 0
 
 
-def test_ai_cannot_move_objective_band(client, registered_user, monkeypatch):
+def test_ai_never_called_for_objective_bands(client, registered_user, monkeypatch):
     """Reading/listening bands come from the official raw-score curve ONLY:
-    even a wrong AI estimate (9.0 for a 0/3 session) must not move the band."""
+    the AI path must not even be invoked for objective sections."""
     from app.services import evaluation_service as ev
 
     token = registered_user["token"]
@@ -205,13 +205,10 @@ def test_ai_cannot_move_objective_band(client, registered_user, monkeypatch):
     }).json()["session"]
     answers = {item["id"]: "zzz" for item in bank["items"]}
 
-    monkeypatch.setattr(ev, "_gemini_objective_estimate", lambda *a, **k: {
-        "band": 9.0,
-        "summary": "AI panel thinks this was excellent.",
-        "strengths": ["AI strength"],
-        "weaknesses": [],
-        "bandDescriptorNotes": [],
-    })
+    def boom(*args, **kwargs):
+        raise AssertionError("AI must never be called for objective sections")
+
+    monkeypatch.setattr(ev, "_gemini_objective_estimate", boom, raising=False)
 
     response = client.post("/api/brain/evaluate", headers=_auth_headers(token), json={
         "profile": {"band": 6.5, "target_band": 7.0},
@@ -223,7 +220,7 @@ def test_ai_cannot_move_objective_band(client, registered_user, monkeypatch):
     result = body.get("evaluation") or body.get("result") or {}
     assert result["predictedBand"] == 2.5, result.get("predictedBand")
     assert result["accuracy"] == 0, result.get("accuracy")
-    assert result["examinerSummary"] == "AI panel thinks this was excellent.", result.get("examinerSummary")
+    assert result["aiEvaluated"] is False, result.get("aiEvaluated")
 
 
 def test_tutor_offline_reply(client, registered_user):
