@@ -133,6 +133,49 @@ FILLERS = {
     "umm", "um", "uh", "er", "eh", "ah", "hmm", "hm", "huh", "mm", "ahem",
 }
 
+LINKER_PHRASES = {
+    "firstly", "first", "secondly", "finally", "moreover", "furthermore",
+    "however", "therefore", "consequently", "although", "while", "whereas",
+    "despite", "in addition", "for example", "for instance", "on the other hand",
+    "in conclusion", "as a result", "because", "but", "also", "thus", "hence",
+    "likewise", "similarly", "in contrast", "nevertheless", "nonetheless",
+}
+
+SUBORDINATORS = {
+    "because", "although", "while", "whereas", "despite", "since", "unless",
+    "provided", "when", "if", "which", "who", "whose", "that", "where",
+    "after", "before", "as soon as",
+}
+
+
+def _linker_count(text: str) -> int:
+    """Distinct cohesive devices actually used (word/phrase boundaries)."""
+    lowered = (" " + (text or "").lower().replace("\n", " ") + " ").replace(",", " ").replace(".", " ").replace(";", " ").replace("(", " ").replace(")", " ")
+    found: set[str] = set()
+    for phrase in LINKER_PHRASES:
+        if re.search(r"\b" + re.escape(phrase) + r"\b", lowered):
+            found.add(phrase)
+    return len(found)
+
+
+def _complex_sentence_ratio(text: str) -> float:
+    sentences = _segment_sentences(text)
+    if not sentences:
+        return 0.0
+    complex_count = 0
+    for sentence in sentences:
+        lowered = " " + sentence.lower() + " "
+        if any(re.search(r"\b" + re.escape(sub) + r"\b", lowered) for sub in SUBORDINATORS):
+            complex_count += 1
+    return complex_count / len(sentences)
+
+
+def _avg_word_length(text: str) -> float:
+    words = (text or "").split()
+    if not words:
+        return 0.0
+    return round(sum(len(word.strip(".,!?;:()\"'")) for word in words) / len(words), 1)
+
 
 def _strip_fillers(text: str) -> str:
     """Remove speech fillers so they never distort fluency or restart analysis.
@@ -147,10 +190,12 @@ def _strip_fillers(text: str) -> str:
 
 
 def _speaking_criteria(text: str) -> list[dict]:
-    """Break a spoken response into the five evaluation criteria.
+    """Score a spoken response on the four official IELTS speaking criteria.
 
-    Filler words are stripped first, so hesitation sounds such as 'umm' never
-    lower the fluency or pronunciation bands — they are reported as advice only.
+    Fluency & Coherence, Lexical Resource, Grammatical Range & Accuracy, and
+    Pronunciation. The pronunciation band is a rhythm proxy derived from the
+    written transcript (it cannot be exact without hearing the recording) and
+    its comment always says so.
     """
     analysis = analyze_text(text)
     words = analysis["wordCount"]
@@ -158,57 +203,58 @@ def _speaking_criteria(text: str) -> list[dict]:
     avg = analysis["averageSentenceWords"]
     unique = analysis["uniqueWordRatio"]
     long_sentences = analysis["longSentenceCount"]
-    base = _heuristic_speaking_band(text)
+    linkers = _linker_count(text)
+    complex_ratio = _complex_sentence_ratio(text)
 
     if words and words >= 40:
-        flu_band = round_band(5.5 + 0.5 * (avg >= 8) + 0.5 * (long_sentences >= 1))
+        fc_band = round_band(min(8.5, 5.5 + 0.5 * (words >= 60) + 0.5 * (linkers >= 2) + 0.5 * (long_sentences >= 1)))
     else:
-        flu_band = round_band(5.5 + 0.5 * (words >= 15))
-    flu_band = min(flu_band, 8.5)
-    flu_comment = (
+        fc_band = round_band(5.0 + 0.5 * (words >= 15))
+    fc_band = min(fc_band, 5.0) if words < 25 else fc_band
+    fc_comment = (
         "Short answer — extend each idea with a reason and an example so the answer keeps flowing."
         if words < 25
-        else "Natural rhythm and connected sentences; keep a steady pace with linking phrases."
+        else "Answers flow with linked ideas and some longer sentences; keep a steady, natural pace."
     )
 
-    pro_band = round_band(max(4.5, min(8.5, base - 0.5 + 0.5 * (avg >= 10 and avg <= 18))))
-    pro_comment = (
-        "Record and listen back, stressing content words and keeping a steady rhythm."
-        if pro_band <= 6.0
-        else "Clear rhythm and sentence stress; keep word stress natural when you use new vocabulary."
+    lr_band = round_band(min(8.5, 5.5 + 0.5 * (unique >= 55) + 0.5 * (unique >= 62) + 0.5 * (_avg_word_length(text) >= 4.5)))
+    lr_band = min(lr_band, 5.0) if words < 25 else lr_band
+    lr_comment = (
+        "Replace generic words with precise, topic-specific vocabulary."
+        if unique < 55
+        else "Good lexical range; use idiomatic or less common expressions naturally."
     )
 
-    gra_band = round_band(max(4.0, min(8.5, base - 0.5 + 0.5 * (avg >= 10))))
+    if not sentences:
+        gra_band = 3.5
+    else:
+        gra_band = round_band(min(8.5, max(3.5, 5.5 + 0.5 * (complex_ratio >= 0.35) + 0.5 * (avg >= 8) + 0.5 * (words >= 45))))
+    gra_band = min(gra_band, 5.0) if words < 25 else gra_band
     gra_comment = (
         "Check verb tenses, articles and subject-verb agreement while you speak."
         if gra_band <= 6.0
         else "Good range of structures; add conditionals and relative clauses for a half-band gain."
     )
 
-    lex_band = round_band(5.5 + 0.5 * (unique >= 55) + 0.5 * (unique >= 62))
-    lex_comment = (
-        "Replace generic words with precise, topic-specific vocabulary."
-        if unique < 55
-        else "Good lexical range; use idiomatic or less common expressions naturally."
-    )
-
-    if sentences >= 2:
-        coh_band = round_band(5.5 + 0.5 * (avg >= 8) + 0.5 * (avg <= 20 and words >= 20))
-    else:
-        coh_band = 4.5
-    coh_comment = (
-        "Organise ideas with ordering and linking words: first, on the other hand, as a result."
-        if coh_band <= 6.0
-        else "Clear progression of ideas with linking devices; keep the ending tied to the question."
+    pro_band = round_band(max(4.0, min(8.0, 0.6 * gra_band + 0.4 * fc_band)))
+    pro_comment = (
+        "Pronunciation is estimated from the written transcript — record and listen back, stressing content words, for an exact band."
+        if pro_band <= 6.0
+        else "Clear rhythm and sentence stress in the transcript; Pronunciation bands are confirmed by listening, not by text."
     )
 
     return [
-        {"criterion": "Fluency", "band": flu_band, "comment": flu_comment},
+        {"criterion": "Fluency & Coherence", "band": fc_band, "comment": fc_comment},
+        {"criterion": "Lexical Resource", "band": lr_band, "comment": lr_comment},
+        {"criterion": "Grammatical Range & Accuracy", "band": gra_band, "comment": gra_comment},
         {"criterion": "Pronunciation", "band": pro_band, "comment": pro_comment},
-        {"criterion": "Grammar", "band": gra_band, "comment": gra_comment},
-        {"criterion": "Vocabulary", "band": lex_band, "comment": lex_comment},
-        {"criterion": "Coherence", "band": coh_band, "comment": coh_comment},
     ]
+
+
+def _speaking_band_from_criteria(text: str) -> float:
+    """Official speaking band: the mean of the four criteria, rounded to 0.5."""
+    bands = [criterion["band"] for criterion in _speaking_criteria(text)]
+    return round_band(sum(bands) / len(bands))
 
 
 def _filler_report(text: str) -> str:
@@ -375,57 +421,117 @@ def grade_objective(user_answer: str, correct_answer: str, options: list[str] | 
     return _match_tolerant(user, correct), correct_answer, 1.0 if _match_tolerant(user, correct) else 0.0
 
 
+def _is_task1_writing(item: dict) -> bool:
+    exam = str(item.get("examSection") or "").lower()
+    title = str(item.get("title") or "").lower()
+    type_label = str(item.get("questionType") or "").lower()
+    return "task 1" in exam or "task 1" in title or "task1" in type_label
+
+
 def _writing_criteria(text: str, item: dict) -> list[dict]:
-    """Break the writing response into the four official criteria bands."""
+    """Score the response on the four official IELTS writing criteria.
+
+    Task Achievement is judged against THIS task's minimum length (150 for
+    Task 1, 250 for Task 2): under the word count caps TA at Band 5, exactly
+    as the official marking scheme does.
+    """
     analysis = analyze_text(text)
     words = analysis["wordCount"]
     sentences = analysis["sentenceCount"]
     paragraphs = analysis["paragraphCount"]
     avg = analysis["averageSentenceWords"]
-    base = _heuristic_writing_band(text)
+    unique = analysis["uniqueWordRatio"]
+    linkers = _linker_count(text)
+    complex_ratio = _complex_sentence_ratio(text)
+    is_task1 = _is_task1_writing(item)
+    required = 150 if is_task1 else 250
 
-    task_low = words and words < 150
-    task_mid = words and (150 <= words < 250)
-    task_band = round_band(6.0 + 0.5 * (not task_low) + 0.5 * (not task_mid)) if words else 3.5
-    task_band = min(task_band, 8.5)
+    if not words:
+        task_band = 3.0
+    else:
+        ratio = words / required
+        if ratio >= 1.15:
+            task_band = 7.0
+        elif ratio >= 1.0:
+            task_band = 6.0
+        elif ratio >= 0.85:
+            task_band = 5.5
+        elif ratio >= 0.7:
+            task_band = 5.0
+        elif ratio >= 0.4:
+            task_band = 4.0
+        else:
+            task_band = 3.5
+        if ratio >= 1.0:
+            if paragraphs >= (3 if not is_task1 else 2):
+                task_band += 0.5
+            if ratio >= 1.3 and words >= required + 60:
+                task_band = 7.5
+        else:
+            task_band = min(task_band, 5.0)
+    task_band = round_band(max(3.0, min(8.5, task_band)))
     task_comment = (
-        "Below the minimum length — the examiner must assume the task is incomplete."
-        if task_low
+        "No response submitted — write at least the minimum length for this task."
+        if not words
+        else "Below the minimum length — official marking caps Task Achievement at Band 5 for under-length answers."
+        if words < required
         else "Meets the length expectation; address every part of the question explicitly for top marks."
-        if task_mid
-        else "Full response length; demonstrate task coverage in every paragraph."
+        if ratio < 1.15
+        else "Full, comfortably over-length response; keep every paragraph tied to the task."
     )
 
     if sentences:
-        coh_band = round_band(5.5 + 0.5 * (paragraphs >= 4) + 0.5 * (avg <= 20))
+        paragraphs_ok = paragraphs >= 3 if not is_task1 else paragraphs >= 2
+        coh_band = round_band(min(8.5, 4.5 + 0.5 * (paragraphs_ok) + 0.5 * (8 <= avg <= 20) + 0.5 * (linkers >= 4)))
     else:
         coh_band = 3.5
     coh_comment = (
         "No paragraphing detected — organise the answer into introduction / body / conclusion."
-        if paragraphs < 3
-        else "Clear paragraph structure; use topic sentences and linking devices to strengthen cohesion."
+        if paragraphs < (3 if not is_task1 else 2)
+        else "Clear paragraph structure; use topic sentences and a variety of linking devices for stronger cohesion."
+        if linkers < 4
+        else "Well-organised with a clear range of cohesive devices; the progression of ideas reads naturally."
     )
 
-    lex_band = round_band(5.5 + 0.5 * (analysis["uniqueWordRatio"] >= 55) + 0.5 * (analysis["uniqueWordRatio"] >= 65))
+    lex_band = round_band(min(8.5, 5.5 + 0.5 * (unique >= 55) + 0.5 * (unique >= 65) + 0.5 * (_avg_word_length(text) >= 4.8)))
+    if words < 60:
+        lex_band = min(lex_band, 5.0)
     lex_comment = (
         "Vocabulary range looks limited — replace generic words with precise, less common alternatives."
-        if analysis["uniqueWordRatio"] < 55
-        else "Good range of vocabulary; refine collocations for a half-band gain."
+        if unique < 55
+        else "Good range of vocabulary; refine collocations and add topic-specific terms for a half-band gain."
     )
 
-    gram_band = round_band(max(3.5, min(8.5, base - 0.5 + 0.5 * (avg >= 12))))
+    if not sentences:
+        gram_band = 3.5
+    else:
+        gram_band = round_band(min(8.5, max(3.5, 5.5 + 0.5 * (complex_ratio >= 0.4) + 0.5 * (avg >= 12) + 0.5 * (sentences >= 6))))
+    if words < 60:
+        gram_band = min(gram_band, 5.0)
     gram_comment = (
         "Accuracy is the priority here — check verb tenses, articles and subject-verb agreement."
         if gram_band <= 6.0
-        else "Grammatical control is solid; vary sentence structures to reach Band 8."
+        else "Grammatical control is solid; mix complex and simple sentences to reach Band 8."
     )
 
     return [
         {"criterion": "Task Achievement", "band": task_band, "comment": task_comment},
         {"criterion": "Coherence and Cohesion", "band": coh_band, "comment": coh_comment},
-        {"criterion": "Lexical Resource (Vocabulary)", "band": lex_band, "comment": lex_comment},
+        {"criterion": "Lexical Resource", "band": lex_band, "comment": lex_comment},
         {"criterion": "Grammatical Range and Accuracy", "band": gram_band, "comment": gram_comment},
     ]
+
+
+def _writing_band_from_criteria(text: str, item: dict) -> float:
+    """Official writing band: the mean of the four criteria, rounded to 0.5.
+
+    Under-length responses are handled at criterion level exactly like the
+    official scheme: Task Achievement is capped at Band 5 below the task's
+    minimum word count, and responses too short to demonstrate range cannot
+    score above 5 on Lexical Resource or Grammatical Range.
+    """
+    criteria = _writing_criteria(text, item)
+    return round_band(sum(c["band"] for c in criteria) / len(criteria))
 
 
 def _subjective_feedback(item: dict, answer: str) -> dict:
@@ -433,7 +539,7 @@ def _subjective_feedback(item: dict, answer: str) -> dict:
         clean_answer = _strip_fillers(answer)
         text_analysis = analyze_text(clean_answer)
         filler_advice = _filler_report(answer)
-        band = _heuristic_speaking_band(clean_answer)
+        band = _speaking_band_from_criteria(clean_answer)
         accuracy = round((band / 9) * 100)
         criteria = _speaking_criteria(clean_answer)
         text_analysis["insights"] = (text_analysis.get("insights") or []) + [filler_advice]
@@ -446,7 +552,7 @@ def _subjective_feedback(item: dict, answer: str) -> dict:
     else:
         text_analysis = analyze_text(answer)
         filler_advice = ""
-        band = _heuristic_writing_band(answer)
+        band = _writing_band_from_criteria(answer, item)
         accuracy = round((band / 9) * 100)
         criteria = _writing_criteria(answer, item)
         speaking_teach = None
@@ -942,7 +1048,12 @@ def evaluate_session(db: Session, user: models.User, profile: models.StudentProf
 
     # Objective skills use the official IELTS raw-score curve (scaled to the
     # 40-mark paper), never a blunt percentage table.
-    predicted_band = band_from_count(module, objective_correct, len(objective_only)) if module in ("reading", "listening") else _estimated_subjective_band(skill_results)
+    if module in ("reading", "listening"):
+        predicted_band = band_from_count(module, objective_correct, len(objective_only))
+    elif module == "writing":
+        predicted_band = _writing_weighted_band(items, skill_results)
+    else:
+        predicted_band = _estimated_subjective_band(skill_results)
     predicted_band = round_band(predicted_band)
 
     text_answers = [a for a in answers.values() if (a or "").strip() and len(a.split()) > 20]
@@ -1049,7 +1160,39 @@ def _estimated_subjective_band(skill_results: list[dict]) -> float:
     bands = [r["feedback"].get("estimatedBand") for r in skill_results if r.get("feedback", {}).get("estimatedBand")]
     if not bands:
         return 5.0
-    return sum(bands) / len(bands)
+    return round_band(sum(bands) / len(bands))
+
+
+def _writing_weighted_band(items: list[dict], skill_results: list[dict]) -> float:
+    """Official Writing band for a two-task response.
+
+    IELTS weights Task 2 at two-thirds of the Writing score, so a full mock
+    scores (Task 1 + 2 x Task 2) / 3. Task identity comes from the paper's
+    examSection/title; any unresolvable item counts as Task 2 (the default
+    assumption of the national standard exam design).
+    """
+    bands: dict[str, list[float]] = {"task1": [], "task2": []}
+    for item, graded in zip(items, skill_results):
+        band = (graded.get("feedback") or {}).get("estimatedBand")
+        if not band:
+            continue
+        key = "task1" if _is_task1_writing(item) else "task2"
+        bands[key].append(float(band))
+    task1 = _average_bands(bands["task1"])
+    task2 = _average_bands(bands["task2"])
+    if task1 is None and task2 is None:
+        return 5.0
+    if task1 is None:
+        return round_band(task2)
+    if task2 is None:
+        return round_band(task1)
+    return round_band((task1 + 2 * task2) / 3)
+
+
+def _average_bands(values: list[float]) -> float | None:
+    if not values:
+        return None
+    return round_band(sum(values) / len(values))
 
 
 def _persist_session(db: Session, user: models.User, profile: models.StudentProfile, module: str, session_data: dict, answers: dict[str, str], skill_results: list[dict], band: float, accuracy: float, wrong_by_type: dict[str, int]) -> None:

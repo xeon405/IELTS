@@ -212,3 +212,63 @@ def test_bank_rejects_oversize(client, registered_user):
     })
     assert response.status_code in (200, 400, 413), response.text
 
+
+def test_writing_criteria_official_curves():
+    """Writing bands come from the four official criteria, task-aware."""
+    from app.services.evaluation_service import _writing_band_from_criteria, _writing_weighted_band, _is_task1_writing
+
+    full_task2 = (
+        "Governments should invest more in public transport. First, it reduces congestion in city centres because fewer people drive to work. "
+        "Moreover, public transport is cheaper for low-income families, although its quality depends on reliable funding. "
+        "For example, cities that expanded bus networks have seen fewer car journeys and noticeably cleaner air. "
+        "Furthermore, cycling infrastructure encourages people to exercise as they travel, which improves public health over time. "
+        "On the other hand, some argue that cars remain essential in rural areas where buses are rare or expensive to run. "
+        "Therefore, investment should focus on urban networks first, while subsidies keep rural connections alive. "
+        "In addition, electric buses reduce emissions even further, and many governments already fund them through green taxes. "
+        "However, none of this works unless fares stay affordable, because commuters will otherwise return to private cars. "
+        "Finally, well-designed stations and safe cycle lanes convince more people to switch, whereas crowded, unreliable services discourage them. "
+        "In conclusion, while cars will not disappear, a well-funded transport system is the most practical way to reduce traffic and "
+        "pollution across the country, and it improves the quality of everyday life for millions of residents, which is why governments "
+        "should treat it as a priority alongside housing and education."
+    )
+    band = _writing_band_from_criteria(full_task2, {"title": "Task 2 Opinion"})
+    assert 5.5 <= band <= 8.5, band
+
+    tiny_task1 = _writing_band_from_criteria("The chart shows sales. Sales rose. They fell. Top is cars.", {"examSection": "Task 1"})
+    assert tiny_task1 <= 5.0, tiny_task1
+
+    empty = _writing_band_from_criteria("", {"title": "Task 2 Opinion"})
+    assert empty <= 4.5, empty
+
+    assert _is_task1_writing({"examSection": "Task 1"}) is True
+    assert _is_task1_writing({"title": "Task 2 Opinion"}) is False
+
+    weighted = _writing_weighted_band(
+        [{"examSection": "Task 1"}, {"examSection": "Task 2"}],
+        [{"feedback": {"estimatedBand": 5.0}}, {"feedback": {"estimatedBand": 7.0}}],
+    )
+    assert weighted == 6.5, weighted
+
+
+def test_speaking_criteria_official_curves():
+    """Speaking bands come from the four official criteria (FC, LR, GRA, P)."""
+    from app.services.evaluation_service import _speaking_band_from_criteria, _speaking_criteria
+
+    structured = (
+        "I usually prefer reading at home because it is quiet, although I also enjoy libraries when the weather is bad. "
+        "For example, I read before bed which helps me relax, and when I travel I carry a small book with me. "
+        "If I have a long journey, I can finish a whole chapter. However, I find e-books convenient since they fit in my pocket, "
+        "but I still choose paper books because I like the feeling of turning pages, which makes reading feel like a real experience."
+    )
+    band = _speaking_band_from_criteria(structured)
+    assert 5.5 <= band <= 8.5, band
+
+    short = _speaking_band_from_criteria("I like reading. It is fun.")
+    assert short <= 5.0, short
+
+    empty = _speaking_band_from_criteria("")
+    assert empty <= 5.0, empty
+
+    criteria = _speaking_criteria(structured)
+    assert [c["criterion"] for c in criteria] == ["Fluency & Coherence", "Lexical Resource", "Grammatical Range & Accuracy", "Pronunciation"]
+

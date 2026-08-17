@@ -2366,33 +2366,10 @@ function calculateSessionBand(
   const text = Object.values(answers)
     .filter((answer) => answer && answer.trim())
     .join("\n\n");
-  const stats = analyzeText(text);
-  const words = stats.wordCount;
   if (module === "writing") {
-    let band = 5.0;
-    if (words >= 250) band += 1.0;
-    else if (words >= 150) band += 0.5;
-    else if (words < 60) band = 3.5;
-    if (stats.averageSentenceWords >= 14) band += 0.5;
-    if (stats.paragraphCount >= 3) band += 0.5;
-    if (stats.uniqueWordRatio >= 55) band += 0.5;
-    else if (stats.uniqueWordRatio < 45) band -= 0.5;
-    return clampBand(band);
+    return writingCriteriaBand(text, session.items[0] ?? {});
   }
-
-  let band = 5.0;
-  if (words >= 60) band += 1.0;
-  else if (words >= 30) band += 0.5;
-  else band -= 0.5;
-  const linkers = (["because", "however", "therefore", "for example", "although", "despite", "whereas"].filter((word) =>
-    text.toLowerCase().includes(word),
-  )).length;
-  const conditionals = (["if", "would", "could", "should", "might", "may"].filter((word) =>
-    text.toLowerCase().includes(word),
-  )).length;
-  if (linkers >= 2) band += 0.5;
-  if (conditionals >= 1) band += 0.5;
-  return clampBand(band);
+  return speakingCriteriaBand(text);
 }
 
 function normalizeAnswer(text: string): string {
@@ -2441,6 +2418,140 @@ function bandFromCount(skill: Skill, correct: number, total: number): number {
     if (scaled >= threshold) return band;
   }
   return table[table.length - 1][1];
+}
+
+const COHESIVE_LINKERS = [
+  "firstly", "first", "secondly", "finally", "moreover", "furthermore",
+  "however", "therefore", "consequently", "although", "while", "whereas",
+  "despite", "in addition", "for example", "for instance", "on the other hand",
+  "in conclusion", "as a result", "because", "but", "also", "thus", "hence",
+  "likewise", "similarly", "in contrast", "nevertheless", "nonetheless",
+];
+
+const SUBORDINATOR_WORDS = [
+  "because", "although", "while", "whereas", "despite", "since", "unless",
+  "provided", "when", "if", "which", "who", "whose", "that", "where",
+  "after", "before", "as soon as",
+];
+
+function escapeRegex(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function linkerCount(text: string): number {
+  const lowered = ` ${(text ?? "").toLowerCase().replace(/[\n.,;()]/g, " ")} `;
+  const found = new Set<string>();
+  for (const phrase of COHESIVE_LINKERS) {
+    if (new RegExp(`\\b${escapeRegex(phrase)}\\b`).test(lowered)) found.add(phrase);
+  }
+  return found.size;
+}
+
+function complexSentenceRatio(text: string): number {
+  const sentences = splitSentences(text);
+  if (!sentences.length) return 0;
+  let complex = 0;
+  for (const sentence of sentences) {
+    const lowered = ` ${sentence.toLowerCase()} `;
+    if (SUBORDINATOR_WORDS.some((sub) => new RegExp(`\\b${escapeRegex(sub)}\\b`).test(lowered))) complex++;
+  }
+  return complex / sentences.length;
+}
+
+function splitSentences(text: string): string[] {
+  return (text ?? "")
+    .split(/[.!?]+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function avgWordLength(text: string): number {
+  const words = (text ?? "").split(/\s+/).filter(Boolean);
+  if (!words.length) return 0;
+  const total = words.reduce((sum, word) => sum + word.replace(/[.,!?;:()"']/g, "").length, 0);
+  return Math.round((total / words.length) * 10) / 10;
+}
+
+function isTask1Writing(item: { examSection?: string; title?: string; questionType?: string }): boolean {
+  const exam = (item.examSection ?? "").toLowerCase();
+  const title = (item.title ?? "").toLowerCase();
+  const typeLabel = (item.questionType ?? "").toLowerCase();
+  return exam.includes("task 1") || title.includes("task 1") || typeLabel.includes("task1");
+}
+
+function writingCriteriaBand(text: string, item: { examSection?: string; title?: string; questionType?: string }): number {
+  const analysis = analyzeText(text);
+  const words = analysis.wordCount;
+  const sentences = analysis.sentenceCount;
+  const paragraphs = analysis.paragraphCount;
+  const avg = analysis.averageSentenceWords;
+  const unique = analysis.uniqueWordRatio;
+  const linkers = linkerCount(text);
+  const complexRatio = complexSentenceRatio(text);
+  const isTask1 = isTask1Writing(item);
+  const required = isTask1 ? 150 : 250;
+
+  let taskBand: number;
+  if (!words) {
+    taskBand = 3.0;
+  } else {
+    const ratio = words / required;
+    if (ratio >= 1.15) taskBand = 7.0;
+    else if (ratio >= 1.0) taskBand = 6.0;
+    else if (ratio >= 0.85) taskBand = 5.5;
+    else if (ratio >= 0.7) taskBand = 5.0;
+    else if (ratio >= 0.4) taskBand = 4.0;
+    else taskBand = 3.5;
+    if (ratio >= 1.0) {
+      if (paragraphs >= (isTask1 ? 2 : 3)) taskBand += 0.5;
+      if (ratio >= 1.3 && words >= required + 60) taskBand = 7.5;
+    } else {
+      taskBand = Math.min(taskBand, 5.0);
+    }
+  }
+  taskBand = roundToHalf(Math.max(3.0, Math.min(8.5, taskBand)));
+
+  let cohesionBand = sentences
+    ? roundToHalf(Math.min(8.5, 4.5 + 0.5 * (paragraphs >= (isTask1 ? 2 : 3) ? 1 : 0) + 0.5 * (avg >= 8 && avg <= 20 ? 1 : 0) + 0.5 * (linkers >= 4 ? 1 : 0)))
+    : 3.5;
+  if (words < 60) cohesionBand = Math.min(cohesionBand, 5.0);
+
+  let lexiconBand = roundToHalf(Math.min(8.5, 5.5 + 0.5 * (unique >= 55 ? 1 : 0) + 0.5 * (unique >= 65 ? 1 : 0) + 0.5 * (avgWordLength(text) >= 4.8 ? 1 : 0)));
+  if (words < 60) lexiconBand = Math.min(lexiconBand, 5.0);
+
+  let grammarBand = sentences
+    ? roundToHalf(Math.min(8.5, Math.max(3.5, 5.5 + 0.5 * (complexRatio >= 0.4 ? 1 : 0) + 0.5 * (avg >= 12 ? 1 : 0) + 0.5 * (sentences >= 6 ? 1 : 0))))
+    : 3.5;
+  if (words < 60) grammarBand = Math.min(grammarBand, 5.0);
+
+  return roundToHalf((taskBand + cohesionBand + lexiconBand + grammarBand) / 4);
+}
+
+function speakingCriteriaBand(text: string): number {
+  const analysis = analyzeText(text);
+  const words = analysis.wordCount;
+  const sentences = analysis.sentenceCount;
+  const avg = analysis.averageSentenceWords;
+  const unique = analysis.uniqueWordRatio;
+  const longSentences = analysis.longSentenceCount;
+  const linkers = linkerCount(text);
+  const complexRatio = complexSentenceRatio(text);
+
+  let fluencyBand = words >= 40
+    ? roundToHalf(Math.min(8.5, 5.5 + 0.5 * (words >= 60 ? 1 : 0) + 0.5 * (linkers >= 2 ? 1 : 0) + 0.5 * (longSentences >= 1 ? 1 : 0)))
+    : roundToHalf(5.0 + 0.5 * (words >= 15 ? 1 : 0));
+  if (words < 25) fluencyBand = Math.min(fluencyBand, 5.0);
+
+  let vocabularyBand = roundToHalf(Math.min(8.5, 5.5 + 0.5 * (unique >= 55 ? 1 : 0) + 0.5 * (unique >= 62 ? 1 : 0) + 0.5 * (avgWordLength(text) >= 4.5 ? 1 : 0)));
+  if (words < 25) vocabularyBand = Math.min(vocabularyBand, 5.0);
+
+  let grammarBand = sentences
+    ? roundToHalf(Math.min(8.5, Math.max(3.5, 5.5 + 0.5 * (complexRatio >= 0.35 ? 1 : 0) + 0.5 * (avg >= 8 ? 1 : 0) + 0.5 * (words >= 45 ? 1 : 0))))
+    : 3.5;
+  if (words < 25) grammarBand = Math.min(grammarBand, 5.0);
+
+  const pronunciationBand = roundToHalf(Math.max(4.0, Math.min(8.0, 0.6 * grammarBand + 0.4 * fluencyBand)));
+  return roundToHalf((fluencyBand + vocabularyBand + grammarBand + pronunciationBand) / 4);
 }
 
 function findLocalItemById(id: string): PracticeItem | undefined {
@@ -2618,32 +2729,24 @@ export function evaluateMockExam(
           .map((item) => answers[item.id])
           .filter((answer): answer is string => Boolean(answer && answer.trim()))
           .join("\n\n");
-        const words = analyzeText(text).wordCount;
         if (skill === "writing") {
-          let band = 5.0;
-          if (words >= 250) band += 1.0;
-          else if (words >= 150) band += 0.5;
-          else if (words < 60) band = 3.5;
-          const stats = analyzeText(text);
-          if (stats.averageSentenceWords >= 14) band += 0.5;
-          if (stats.paragraphCount >= 3) band += 0.5;
-          if (stats.uniqueWordRatio >= 55) band += 0.5;
-          else if (stats.uniqueWordRatio < 45) band -= 0.5;
-          sectionBands[skill] = clampBand(band);
+          const tasks: Record<"task1" | "task2", string[]> = { task1: [], task2: [] };
+          session.items.forEach((item) => {
+            const key = isTask1Writing(item) ? "task1" : "task2";
+            const answer = answers[item.id];
+            if (answer && answer.trim()) tasks[key].push(answer);
+          });
+          const taskBand = (key: "task1" | "task2"): number | null => {
+            const texts = tasks[key];
+            if (!texts.length) return null;
+            return writingCriteriaBand(texts.join("\n\n"), { title: key === "task1" ? "Task 1" : "Task 2" });
+          };
+          const task1 = taskBand("task1");
+          const task2 = taskBand("task2");
+          sectionBands[skill] =
+            task1 !== null && task2 !== null ? roundToHalf((task1 + 2 * task2) / 3) : task1 ?? task2 ?? profile.bands[skill];
         } else {
-          let band = 5.0;
-          if (words >= 60) band += 1.0;
-          else if (words >= 30) band += 0.5;
-          else band -= 0.5;
-          const linkers = (["because", "however", "therefore", "for example", "although", "despite", "whereas"].filter((word) =>
-            text.toLowerCase().includes(word),
-          )).length;
-          const conditionals = (["if", "would", "could", "should", "might", "may"].filter((word) =>
-            text.toLowerCase().includes(word),
-          )).length;
-          if (linkers >= 2) band += 0.5;
-          if (conditionals >= 1) band += 0.5;
-          sectionBands[skill] = clampBand(band);
+          sectionBands[skill] = speakingCriteriaBand(text);
         }
       }
     });
@@ -2704,10 +2807,10 @@ export function evaluateMockExam(
       ? `Reading: ${sectionAccuracy.reading}% correct, estimated band ${bands.reading.toFixed(1)}.`
       : "Reading answers could not be graded offline against the paper.",
     writing: sectionAccuracy.writing !== undefined
-      ? `Writing: text-length and criteria heuristics put your answer at band ${bands.writing.toFixed(1)}.`
+      ? `Writing: criterion-based estimate (Task Achievement, Coherence, Lexical Resource, Grammar) — band ${bands.writing.toFixed(1)}.`
       : "Writing answers could not be graded offline against the paper.",
     speaking: sectionAccuracy.speaking !== undefined
-      ? `Speaking: response length and language signals put your answers at band ${bands.speaking.toFixed(1)}.`
+      ? `Speaking: criterion-based estimate (Fluency, Lexical Resource, Grammar, Pronunciation proxy) — band ${bands.speaking.toFixed(1)}.`
       : "Speaking answers could not be graded offline against the paper.",
   };
   const accuracySections = mockSkills
