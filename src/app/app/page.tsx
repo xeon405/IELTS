@@ -240,8 +240,9 @@ export default function AppPage() {
     const module = activeRecommendation?.module;
     if (!module) return;
     prefetchingRef.current = true;
+    const lastOtherModule = lastSession && lastSession.module !== module ? lastSession.module : null;
     const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-    (async () => {
+(async () => {
       const modes = new Set<string>();
       const typeLists: Record<Skill, string[]> = {
         reading: [...readingQuestionTypes] as string[],
@@ -250,15 +251,22 @@ export default function AppPage() {
         speaking: [...speakingQuestionTypes] as string[],
       };
       (moduleConfig[module]?.modes ?? []).forEach((label) => {
-          const mapped = modeToBackend(module, label);
+        const mapped = modeToBackend(module, label);
+        if (mapped && !["Blueprint", "Practice by Question Type"].includes(label)) modes.add(mapped);
+      });
+      if (module !== "writing") modes.add("Question by Question");
+      const targetModule = lastOtherModule ?? module;
+      if (targetModule !== module) {
+        (moduleConfig[targetModule]?.modes ?? []).forEach((label) => {
+          const mapped = modeToBackend(targetModule, label);
           if (mapped && !["Blueprint", "Practice by Question Type"].includes(label)) modes.add(mapped);
         });
-        if (module !== "writing") modes.add("Question by Question");
+      }
       for (const mode of modes) {
-        const key = `session:${module}:${mode}`;
+        const key = `session:${targetModule}:${mode}`;
         if (!cacheGet(key)) {
           try {
-            const response = await brainApi.createSession(profile, module, mode);
+            const response = await brainApi.createSession(profile, targetModule, mode);
             cacheSet(key, response.session);
           } catch {
             // Background prefetch failures are silent.
@@ -266,11 +274,11 @@ export default function AppPage() {
         }
         await delay(350);
       }
-      for (const type of typeLists[module]) {
-        const key = `bank:${module}:${type}`;
+      for (const type of typeLists[targetModule]) {
+        const key = `bank:${targetModule}:${type}`;
         if (!cacheGet(key)) {
           try {
-            const response = await brainApi.bank(profile, module, type, 60);
+            const response = await brainApi.bank(profile, targetModule, type, 60);
             cacheSet(key, response.session);
           } catch {
             // Background prefetch failures are silent.
@@ -281,7 +289,7 @@ export default function AppPage() {
     })().finally(() => {
       prefetchingRef.current = false;
     });
-  }, [needsOnboarding, profile, activeRecommendation]);
+  }, [needsOnboarding, profile, activeRecommendation, lastSession?.module]);
 
   const launchPractice = useCallback(
     async (module?: Skill, mode?: string) => {
