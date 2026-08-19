@@ -223,17 +223,6 @@ export default function AppPage() {
   const activeRecommendation = liveRecommendation ?? recommendation;
   const bandGap = useMemo(() => getBandGap(profile), [profile]);
 
-  useEffect(() => {
-    if (needsOnboarding || !activeRecommendation) return;
-    const module = activeRecommendation.module;
-    const key = `session:${module}:Quick Practice`;
-    if (cacheGet(key)) return;
-    brainApi
-      .createSession(profile, module, "Quick Practice")
-      .then((response) => cacheSet(key, response.session))
-      .catch(() => {});
-  }, [activeRecommendation, profile, needsOnboarding]);
-
   const prefetchingRef = useRef(false);
   useEffect(() => {
     if (needsOnboarding || prefetchingRef.current) return;
@@ -241,8 +230,9 @@ export default function AppPage() {
     if (!module) return;
     prefetchingRef.current = true;
     const lastOtherModule = lastSession && lastSession.module !== module ? lastSession.module : null;
+    const targetModule = (lastOtherModule ?? module) as Skill;
     const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-(async () => {
+    (async () => {
       const modes = new Set<string>();
       const typeLists: Record<Skill, string[]> = {
         reading: [...readingQuestionTypes] as string[],
@@ -250,41 +240,78 @@ export default function AppPage() {
         writing: [...writingQuestionTypes] as string[],
         speaking: [...speakingQuestionTypes] as string[],
       };
-      (moduleConfig[module]?.modes ?? []).forEach((label) => {
-        const mapped = modeToBackend(module, label);
-        if (mapped && !["Blueprint", "Practice by Question Type"].includes(label)) modes.add(mapped);
-      });
-      if (module !== "writing") modes.add("Question by Question");
-      const targetModule = lastOtherModule ?? module;
-      if (targetModule !== module) {
-        (moduleConfig[targetModule]?.modes ?? []).forEach((label) => {
-          const mapped = modeToBackend(targetModule, label);
+      ([module, targetModule] as Skill[]).forEach((m) => {
+        (moduleConfig[m]?.modes ?? []).forEach((label) => {
+          const mapped = modeToBackend(m, label);
           if (mapped && !["Blueprint", "Practice by Question Type"].includes(label)) modes.add(mapped);
         });
-      }
-      for (const mode of modes) {
-        const key = `session:${targetModule}:${mode}`;
-        if (!cacheGet(key)) {
+      });
+      if (module !== "writing") modes.add("Question by Question");
+      const prefetchSession = async (m: Skill, mode: string) => {
+        const key = `session:${m}:${mode}`;
+        if (cacheGet(key)) return;
+        try {
+          const response = await brainApi.createSession(profile, m, mode);
+          cacheSet(key, response.session);
+        } catch {
+          // Background prefetch failures are silent.
+        }
+      };
+      const prefetchBank = async (m: Skill, type: string) => {
+        const key = `bank:${m}:${type}`;
+        if (cacheGet(key)) return;
+        try {
+          const response = await brainApi.bank(profile, m, type, 60);
+          cacheSet(key, response.session);
+        } catch {
+          // Background prefetch failures are silent.
+        }
+      };
+      const prefetchMeta = async (m: Skill) => {
+        const metaKey = `blueprints:${m}`;
+        if (!cacheGet(metaKey)) {
           try {
-            const response = await brainApi.createSession(profile, targetModule, mode);
-            cacheSet(key, response.session);
+            const meta = await brainApi.blueprints(m);
+            cacheSet(metaKey, meta);
           } catch {
             // Background prefetch failures are silent.
           }
         }
-        await delay(350);
+        const detailKey = `blueprint:${m}`;
+        if (!cacheGet(detailKey)) {
+          try {
+            const detail = await brainApi.blueprint(m);
+            cacheSet(detailKey, detail);
+          } catch {
+            // Background prefetch failures are silent.
+          }
+        }
+      };
+      const rec = activeRecommendation;
+      const recMode = rec && modes.has(rec.mode) ? rec.mode : [...modes][0];
+      const recType =
+        rec && "focusQuestionTypes" in rec && Array.isArray((rec as Record<string, unknown>).focusQuestionTypes) && (rec as { focusQuestionTypes: string[] }).focusQuestionTypes.length
+          ? (rec as { focusQuestionTypes: string[] }).focusQuestionTypes[0]
+          : typeLists[targetModule][0];
+      const recBankKey = `bank:${targetModule}:${recType}`;
+      const priority = [
+        Promise.allSettled([
+          prefetchMeta(targetModule),
+          recMode ? prefetchSession(targetModule, recMode) : Promise.resolve(),
+          cacheGet(recBankKey) ? Promise.resolve() : prefetchBank(targetModule, recType),
+        ]),
+      ];
+      await Promise.allSettled(priority);
+      await delay(6000);
+      for (const mode of modes) {
+        if (mode === recMode) continue;
+        await prefetchSession(targetModule, mode);
+        await delay(1500);
       }
       for (const type of typeLists[targetModule]) {
-        const key = `bank:${targetModule}:${type}`;
-        if (!cacheGet(key)) {
-          try {
-            const response = await brainApi.bank(profile, targetModule, type, 60);
-            cacheSet(key, response.session);
-          } catch {
-            // Background prefetch failures are silent.
-          }
-        }
-        await delay(350);
+        if (type === recType) continue;
+        await prefetchBank(targetModule, type);
+        await delay(1500);
       }
     })().finally(() => {
       prefetchingRef.current = false;

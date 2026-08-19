@@ -31,6 +31,7 @@ import {
 import { cn } from "@/lib/utils";
 import { advanceQuestionWindow, rotateFreshItems } from "@/lib/fresh-items";
 import { completionPercent, modeToBackend, moduleConfig, wordCount } from "@/lib/app-config";
+import { cacheGet, cacheSet } from "@/lib/click-cache";
 import { API_BASE, clearAuth, getToken, isBackendUp } from "@/lib/backend";
 import { ChartCard } from "@/components/chart-card";
 import { CountdownTimer } from "@/components/countdown-timer";
@@ -38,7 +39,6 @@ import { AudioPlayer } from "@/components/audio-player";
 import { VoiceRecorder } from "@/components/voice-recorder";
 import { toast } from "@/hooks/use-toast";
 import { brainApi } from "@/lib/api";
-import { cacheGet, cacheSet } from "@/lib/click-cache";
 import type {
   BlueprintMeta,
   EvaluationResult,
@@ -99,17 +99,31 @@ export function PracticeModule({
 
   useEffect(() => {
     let cancelled = false;
-    setBlueprintLoading(true);
+    const metaCacheKey = `blueprints:${module}`;
+    const cachedMeta = cacheGet<BlueprintMeta[]>(metaCacheKey);
+    if (cachedMeta && cachedMeta.length > 0) {
+      setBlueprints(cachedMeta);
+      setBlueprintLoading(false);
+    } else {
+      setBlueprintLoading(true);
+    }
+    if (cachedMeta && cachedMeta.length > 0) return;
     // Call the backend directly (same route as every other brain call):
     // the Vercel proxy adds a hop + cold start for no benefit here.
     brainApi
       .blueprints(module)
       .then((data: BlueprintMeta[]) => {
         if (cancelled) return;
-        setBlueprints(data && data.length > 0 ? data : getBlueprintMeta(module));
+        const resolved = data && data.length > 0 ? data : getBlueprintMeta(module);
+        setBlueprints(resolved);
+        cacheSet(metaCacheKey, resolved);
       })
       .catch(() => {
-        if (!cancelled) setBlueprints(getBlueprintMeta(module));
+        if (!cancelled) {
+          const resolved = getBlueprintMeta(module);
+          setBlueprints(resolved);
+          cacheSet(metaCacheKey, resolved);
+        }
       })
       .finally(() => {
         if (!cancelled) setBlueprintLoading(false);
@@ -122,10 +136,19 @@ export function PracticeModule({
   useEffect(() => {
     if (module !== "reading" && module !== "listening") return;
     let cancelled = false;
+    const detailCacheKey = `blueprint:${module}`;
+    const cachedDetail = cacheGet<ReadingBlueprint>(detailCacheKey);
+    if (cachedDetail) {
+      setReadingBlueprint(cachedDetail);
+      return;
+    }
     brainApi
       .blueprint(module)
       .then((data) => {
-        if (!cancelled) setReadingBlueprint(data);
+        if (!cancelled) {
+          setReadingBlueprint(data);
+          cacheSet(detailCacheKey, data);
+        }
       })
       .catch(() => {
         if (!cancelled) setReadingBlueprint(null);
