@@ -22,6 +22,7 @@ import { cacheGet, cacheSet } from "@/lib/click-cache";
 import { authApi, clearAuth, getToken } from "@/lib/backend";
 import { computeTimingMetrics } from "@/lib/timing";
 import { advanceQuestionWindow, rotateFreshItems } from "@/lib/fresh-items";
+import { modeToBackend, moduleConfig } from "@/lib/app-config";
 import {
   getSampleAnswers,
   isSkill,
@@ -38,7 +39,11 @@ import {
   getAdaptiveRecommendation,
   getBandGap,
   isQuestionTypeMode,
+  listeningQuestionTypes,
   migrateProfile,
+  readingQuestionTypes,
+  speakingQuestionTypes,
+  writingQuestionTypes,
   type AdaptiveRecommendation,
   type EvaluationResult,
   type MockExamResult,
@@ -228,6 +233,55 @@ export default function AppPage() {
       .then((response) => cacheSet(key, response.session))
       .catch(() => {});
   }, [activeRecommendation, profile, needsOnboarding]);
+
+  const prefetchingRef = useRef(false);
+  useEffect(() => {
+    if (needsOnboarding || prefetchingRef.current) return;
+    const module = activeRecommendation?.module;
+    if (!module) return;
+    prefetchingRef.current = true;
+    const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+    (async () => {
+      const modes = new Set<string>();
+      const typeLists: Record<Skill, string[]> = {
+        reading: [...readingQuestionTypes] as string[],
+        listening: [...listeningQuestionTypes] as string[],
+        writing: [...writingQuestionTypes] as string[],
+        speaking: [...speakingQuestionTypes] as string[],
+      };
+      (moduleConfig[module]?.modes ?? []).forEach((label) => {
+          const mapped = modeToBackend(module, label);
+          if (mapped && !["Blueprint", "Practice by Question Type"].includes(label)) modes.add(mapped);
+        });
+        if (module !== "writing") modes.add("Question by Question");
+      for (const mode of modes) {
+        const key = `session:${module}:${mode}`;
+        if (!cacheGet(key)) {
+          try {
+            const response = await brainApi.createSession(profile, module, mode);
+            cacheSet(key, response.session);
+          } catch {
+            // Background prefetch failures are silent.
+          }
+        }
+        await delay(350);
+      }
+      for (const type of typeLists[module]) {
+        const key = `bank:${module}:${type}`;
+        if (!cacheGet(key)) {
+          try {
+            const response = await brainApi.bank(profile, module, type, 60);
+            cacheSet(key, response.session);
+          } catch {
+            // Background prefetch failures are silent.
+          }
+        }
+        await delay(350);
+      }
+    })().finally(() => {
+      prefetchingRef.current = false;
+    });
+  }, [needsOnboarding, profile, activeRecommendation]);
 
   const launchPractice = useCallback(
     async (module?: Skill, mode?: string) => {
