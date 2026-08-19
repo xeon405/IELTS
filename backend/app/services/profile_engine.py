@@ -14,6 +14,8 @@ from sqlalchemy.orm import Session
 
 from .. import models
 from . import band_prediction as bp
+from .state_cache import get as state_cache_get
+from .state_cache import set as state_cache_set
 
 SKILLS = ("reading", "listening", "writing", "speaking")
 
@@ -115,7 +117,17 @@ def _recent_accuracy(practice_history: list[dict]) -> float:
 
 
 def build_learning_state(db: Session, profile: models.StudentProfile) -> dict[str, Any]:
-    """The complete learning memory consumed by the AI engines."""
+    """The complete learning memory consumed by the AI engines.
+
+    Cached for 30s per user: the four reads below are sequential round
+    trips over a remote Postgres link, and this state is rebuilt on every
+    session click, recommendation and mock.
+    """
+    cached = state_cache_get(profile.user_id)
+    if cached is not None:
+        cached["profile"] = profile
+        return cached
+
     bands = _skill_bands(profile)
     practice_history = _practice_history(db, profile.user_id)
     mock_history = _mock_history(db, profile.user_id)
@@ -165,6 +177,7 @@ def build_learning_state(db: Session, profile: models.StudentProfile) -> dict[st
         "grammarLevel": profile.grammar_level,
         "vocabularyLevel": profile.vocabulary_level,
     }
+    state_cache_set(profile.user_id, {key: value for key, value in state.items() if key != "profile"})
     return state
 
 

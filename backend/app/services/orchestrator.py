@@ -73,7 +73,7 @@ def _persist_session(db: Session, user: models.User, session: dict) -> None:
         items_json=session,
     )
     db.add(row)
-    db.commit()
+    db.flush()
 
 
 def _persist_recommendation(db: Session, user: models.User, rec: dict) -> None:
@@ -87,7 +87,7 @@ def _persist_recommendation(db: Session, user: models.User, rec: dict) -> None:
         expected_lift=str(rec.get("expectedBandLift") or ""),
         difficulty_band=float(rec.get("difficultyBand") or 6.0),
     ))
-    db.commit()
+    db.flush()
 
 
 def recommend_only(
@@ -129,6 +129,7 @@ def recommend_and_generate(
 
     _persist_session(db, user, full)
     _persist_recommendation(db, user, rec)
+    db.commit()
 
     session = qg.strip_answers(full)
     return {"recommendation": rec, "session": session}
@@ -162,6 +163,7 @@ def generate_session(
     full["pipeline"] = _pipeline_steps(state, rec, module, mode, types, difficulty)
 
     _persist_session(db, user, full)
+    db.commit()
     return qg.strip_answers(full)
 
 

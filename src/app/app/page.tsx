@@ -18,6 +18,7 @@ import { VocabularyTrainer } from "@/components/vocabulary-trainer";
 import { Onboarding } from "@/components/app/onboarding";
 
 import { brainApi } from "@/lib/api";
+import { cacheGet, cacheSet } from "@/lib/click-cache";
 import { authApi, clearAuth, getToken } from "@/lib/backend";
 import { computeTimingMetrics } from "@/lib/timing";
 import { advanceQuestionWindow, rotateFreshItems } from "@/lib/fresh-items";
@@ -217,24 +218,46 @@ export default function AppPage() {
   const activeRecommendation = liveRecommendation ?? recommendation;
   const bandGap = useMemo(() => getBandGap(profile), [profile]);
 
+  useEffect(() => {
+    if (needsOnboarding || !activeRecommendation) return;
+    const module = activeRecommendation.module;
+    const key = `session:${module}:Quick Practice`;
+    if (cacheGet(key)) return;
+    brainApi
+      .createSession(profile, module, "Quick Practice")
+      .then((response) => cacheSet(key, response.session))
+      .catch(() => {});
+  }, [activeRecommendation, profile, needsOnboarding]);
+
   const launchPractice = useCallback(
     async (module?: Skill, mode?: string) => {
-      setPracticeLoading(true);
-      try {
-        const isType = isQuestionTypeMode(module ?? "reading", mode);
-        const response = await brainApi.createSession(profile, module, isType ? undefined : mode, isType ? mode : undefined);
-        const session = {
-          ...response.session,
-          items: rotateFreshItems(response.session.items, response.session.module, response.session.mode),
-        };
-        preLaunchViewRef.current = viewRef.current;
-        setSession(session);
+      const cacheKey = `session:${module ?? "reading"}:${mode ?? "recommended"}`;
+      const cached = cacheGet<PracticeSession>(cacheKey);
+      const applySession = (session: PracticeSession) => {
+        setSession({
+          ...session,
+          items: rotateFreshItems(session.items, session.module, session.mode),
+        });
         setAnswers({});
         setEvaluation(null);
         setLastSession(session);
         setActiveView(session.module);
+      };
+      if (cached) {
+        preLaunchViewRef.current = viewRef.current;
+        applySession(cached);
+      }
+      setPracticeLoading(!cached);
+      try {
+        const isType = isQuestionTypeMode(module ?? "reading", mode);
+        const response = await brainApi.createSession(profile, module, isType ? undefined : mode, isType ? mode : undefined);
+        cacheSet(cacheKey, response.session);
+        preLaunchViewRef.current = viewRef.current;
+        applySession(response.session);
       } catch (error) {
-        toast({ title: "AI Brain unavailable", description: error instanceof Error ? error.message : "Could not generate a session." });
+        if (!cached) {
+          toast({ title: "AI Brain unavailable", description: error instanceof Error ? error.message : "Could not generate a session." });
+        }
       } finally {
         setPracticeLoading(false);
       }

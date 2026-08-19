@@ -38,6 +38,7 @@ import { AudioPlayer } from "@/components/audio-player";
 import { VoiceRecorder } from "@/components/voice-recorder";
 import { toast } from "@/hooks/use-toast";
 import { brainApi } from "@/lib/api";
+import { cacheGet, cacheSet } from "@/lib/click-cache";
 import type {
   BlueprintMeta,
   EvaluationResult,
@@ -151,6 +152,15 @@ export function PracticeModule({
     activeTypeRef.current = type;
     setBankLoading(true);
     setBankError(null);
+    const cacheKey = `bank:${module}:${type}`;
+    const cached = cacheGet<PracticeSession>(cacheKey);
+    if (cached && Array.isArray(cached.items) && cached.items.length > 0) {
+      setBank({
+        session: { ...cached, items: rotateFreshItems(cached.items, module, cached.mode) },
+        total: cached.items.length,
+      });
+      setBankLoading(false);
+    }
     let lastError = "";
     let lastStatus: number | null = null;
     for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -158,6 +168,7 @@ export function PracticeModule({
       try {
         const response = await brainApi.bank(profile, module, type, 60);
         if (response.session && response.session.items.length > 0) {
+          cacheSet(cacheKey, response.session);
           response.session.items = rotateFreshItems(response.session.items, module, response.session.mode);
           setBank(response);
           setBankLoading(false);
@@ -171,6 +182,10 @@ export function PracticeModule({
         if (lastStatus !== null && lastStatus >= 400 && lastStatus < 500) break;
       }
       if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 600));
+    }
+    if (cached && Array.isArray(cached.items) && cached.items.length > 0) {
+      setBankLoading(false);
+      return;
     }
     const backendUp = await isBackendUp().catch(() => false);
     setBankError({ reason: lastError, backendUp, authExpired: lastStatus === 401 });
