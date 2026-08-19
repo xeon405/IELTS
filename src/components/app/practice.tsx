@@ -156,7 +156,7 @@ export function PracticeModule({
     for (let attempt = 0; attempt < 3; attempt += 1) {
       if (activeAbort.signal.aborted) return;
       try {
-        const response = await brainApi.bank(profile, module, type, 800);
+        const response = await brainApi.bank(profile, module, type, 60);
         if (response.session && response.session.items.length > 0) {
           response.session.items = rotateFreshItems(response.session.items, module, response.session.mode);
           setBank(response);
@@ -198,7 +198,7 @@ export function PracticeModule({
             <Layers className="h-7 w-7" />
           </div>
           <h3 className="mt-4 font-serif text-2xl font-semibold text-[#17342f]">Loading your question bank…</h3>
-          <p className="mt-1 text-sm text-[#66746e]">Fetching up to 500 ready {config.label.toLowerCase()} questions.</p>
+          <p className="mt-1 text-sm text-[#66746e]">Fetching up to 60 ready {config.label.toLowerCase()} questions.</p>
         </div>
       </div>
     );

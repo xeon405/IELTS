@@ -278,7 +278,9 @@ def bank(payload: SessionRequest, _: None = Depends(_BRAIN_AI_LIMIT), user: mode
     if not pool:
         raise HTTPException(status_code=404, detail="That question type has no questions yet.")
     count = _safe_int((payload.session or {}).get("questionCount")) or len(pool)
-    count = max(1, min(count, len(pool)))
+    # Cap the bank payload: 800+ items is megabytes of JSON over slow links.
+    # Bank workbenches scroll through far fewer; re-entering reloads fresh.
+    count = max(1, min(count, 60, len(pool)))
 
     profile = payload.profile or {}
     bands = {
