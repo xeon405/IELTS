@@ -12,13 +12,11 @@ import re
 from typing import Any
 
 from . import knowledge_base as kb
-from . import gemini
 from . import reading_bank
 from . import listening_bank
 from . import writing_bank
 from . import speaking_bank
 from . import large_bank
-from ..config import settings
 
 SKILLS = ("reading", "listening", "writing", "speaking")
 
@@ -904,56 +902,11 @@ def generate_session(profile: dict | None, module: str, mode: str, count: int | 
         "Return questions to frontend",
     ]
 
-    session: dict
-    # Full sections ask the AI for up to 40 fresh items in ONE call, which
-    # always exceeds the provider output-token cap and fails slowly. Large
-    # sessions (mocks, full sections) use the offline banks directly: they are
-    # instant, and each bank holds ~500 items per type so nothing repeats.
-    if gemini.is_ai_available() and count <= settings.AI_MAX_ITEMS_PER_CALL and module != "writing":
-        try:
-            items = gemini.generate_json(_gemini_session_prompt(module, mode, count, profile), system_instruction="You generate original IELTS-style practice material only. Output valid JSON.", use_cache=False)
-            if isinstance(items, dict):
-                items = [items]
-            items = _validate_items(items if isinstance(items, list) else [])
-            if not items:
-                raise RuntimeError("Gemini returned no valid questions")
-            items = _ensure_writing_chart(items) if module == "writing" else items
-            if len(items) < count:
-                fallback_session = _build_fallback_session(module, mode, count, bands, profile_test_type(profile), profile)
-                existing_titles = {str(it.get("title") or "").lower() for it in items}
-                filler_pool = list(fallback_session.get("items", []))
-                filler_index = 0
-                while len(items) < count and filler_pool:
-                    filler = dict(filler_pool[filler_index % len(filler_pool)])
-                    filler_index += 1
-                    if str(filler.get("title") or "").lower() in existing_titles:
-                        continue
-                    if str(filler.get("id") or "") in {str(it.get("id") or "") for it in items}:
-                        filler["id"] = f"{module}-fill-{len(items) + 1}-{filler.get('type', 'q')[:4]}"
-                    items.append(filler)
-                    existing_titles.add(str(filler.get("title") or "").lower())
-            items = items[:count]
-            provider = gemini.active_provider()
-            session = {
-                "id": f"{module}-{provider}-{abs(hash((module, mode, count))) % 1000000}",
-                "module": module,
-                "mode": mode,
-                "title": f"{module.capitalize()} practice — {mode}",
-                "subtitle": f"Original {profile_test_type(profile)} {module} questions generated fresh by {provider} for your current band.",
-                "durationMinutes": kb.mode_duration(module, mode),
-                "questionCount": len(items),
-                "questionTypes": kb.question_types_for(module, mode),
-                "difficultyBand": round(bands.get(module, 5.5) + 0.5, 1),
-                "examinerIntent": f"Lift your {module} band from {bands.get(module)}.",
-                "items": items[:count],
-                "source": provider,
-            }
-        except Exception:
-            session = _build_fallback_session(module, mode, count, bands, profile_test_type(profile), profile)
-            session["pipeline"] = pipeline_steps
-    else:
-        session = _build_fallback_session(module, mode, count, bands, profile_test_type(profile), profile)
-        session["pipeline"] = pipeline_steps
+    # Every session is built instantly from the offline banks (500+ items per
+    # type, per-band filtering): no LLM round-trips, no slow failures. AI stays
+    # only where it is essential: grading writing/speaking and tutor chat.
+    session = _build_fallback_session(module, mode, count, bands, profile_test_type(profile), profile)
+    session["pipeline"] = pipeline_steps
     return session
 
 
