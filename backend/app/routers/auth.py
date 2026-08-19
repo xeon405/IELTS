@@ -69,13 +69,20 @@ def _auth_payload(db: Session, user: models.User, first_login: bool) -> AuthResp
 
 
 def _complete_login(db: Session, user: models.User) -> AuthResponse:
-    """Mark first-login redirect, then return the auth payload."""
+    """Mark first-login redirect, then return the auth payload.
+
+    The payload is also seeded into the /auth/me cache: the app loads
+    straight after login, so the very next /auth/me becomes a cache hit
+    instead of a second full profile assembly.
+    """
     profile = get_or_create_profile(db, user)
     first_login = not profile.first_login_redirected
     if first_login:
         profile.first_login_redirected = True
         db.commit()
-    return _auth_payload(db, user, first_login=first_login)
+    payload = _auth_payload(db, user, first_login=first_login).model_dump()
+    me_cache_set(user.id, payload)
+    return AuthResponse(**payload)
 
 
 def _verify_google_credential(credential: str) -> dict:

@@ -7,7 +7,11 @@ from .config import settings
 
 
 def hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    # Cost 10: ~60-90ms on Render's free CPU instead of ~300-500ms at the
+    # bcrypt default (12). Auth endpoints are already rate-limited, and
+    # existing cost-12 hashes still verify (bcrypt reads the cost from the
+    # stored hash).
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(rounds=10)).decode("utf-8")
 
 
 def verify_password(password: str, hashed: str) -> bool:
