@@ -10,7 +10,7 @@ from email.message import EmailMessage
 
 import httpx
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from jwt import InvalidTokenError
 from sqlalchemy.orm import Session
 
@@ -38,6 +38,7 @@ from ..services.adaptive import serialize_profile
 from ..services.me_cache import invalidate as me_cache_invalidate
 from ..services.me_cache import get as me_cache_get
 from ..services.me_cache import set as me_cache_set
+from ..services.ratelimit import check_rate_limit
 from ..services.ratelimit import rate_limit
 
 logger = logging.getLogger("uvicorn.error")
@@ -380,6 +381,7 @@ def resend_verification(
 @router.post("/login", response_model=AuthResponse)
 def login(
     payload: LoginRequest,
+    request: Request,
     db: Session = Depends(get_db),
     _: None = Depends(rate_limit("auth-login", settings.RATE_LIMIT_LOGIN_MAX, settings.RATE_LIMIT_WINDOW_SECONDS)),
 ):
@@ -390,6 +392,16 @@ def login(
         verify_password(payload.password, DUMMY_PASSWORD_HASH)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password")
     if not verify_password(payload.password, user.hashed_password):
+        # Per-ACCOUNT window on the failure path only: a distributed
+        # brute-force spread across many IPs (each under the per-IP limit,
+        # which a proxy rotation can also dilute) still trips here because
+        # every guess for the same account shares this counter.
+        check_rate_limit(
+            request,
+            scope=f"login:{payload.email.lower()}",
+            max_per_window=max(5, settings.RATE_LIMIT_LOGIN_MAX // 2),
+            window_seconds=settings.RATE_LIMIT_WINDOW_SECONDS,
+        )
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password")
     if not user.email_verified:
         raise HTTPException(
