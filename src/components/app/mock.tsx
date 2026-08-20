@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { isSkill, moduleConfig, skillOrder, type MockSection } from "@/lib/app-config";
 import { CountdownTimer } from "@/components/countdown-timer";
 import { AudioPlayer } from "@/components/audio-player";
+import { ChartCard } from "@/components/chart-card";
 import { PracticeQuestion } from "@/components/app/practice";
 import { VoiceRecorder } from "@/components/voice-recorder";
 import { officialMockSections, getSpeakingBlueprint, getWritingBlueprint, type MockExamResult, type PracticeItem, type PracticeSession, type Skill, type TypedGuide } from "@/lib/ielts-brain";
@@ -1134,8 +1135,8 @@ function ReadingSectionExam({
             </span>
           </div>
           <div className="max-h-[62vh] overflow-y-auto px-4 py-4">
-            <p className="text-sm leading-7 text-[#4f625b]">
-              {items[currentIndex]?.context || "Read the passage, then answer the questions."}
+            <p className="whitespace-pre-line text-sm leading-7 text-[#4f625b]">
+              {passageItems[0]?.context || items[currentIndex]?.context || "Read the passage, then answer the questions."}
             </p>
           </div>
         </div>
@@ -1231,6 +1232,11 @@ function WritingSectionExam({
                 </span>
               </div>
               <p className="mt-4 text-sm font-semibold leading-7 text-[#17342f]">{item.prompt}</p>
+              {item.chart && (item.chart.type || (item.chart as { mixedWith?: unknown }).mixedWith) ? (
+                <div className="mt-4">
+                  <ChartCard chart={item.chart as unknown as Parameters<typeof ChartCard>[0]["chart"]} />
+                </div>
+              ) : null}
               <textarea
                 value={answers[item.id] ?? ""}
                 onChange={(event) => onAnswer(item.id, event.target.value)}
