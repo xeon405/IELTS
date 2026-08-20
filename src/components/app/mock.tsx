@@ -1294,6 +1294,7 @@ export function MockExam({
   onAnswer,
   onFillDemo,
   onNext,
+  onJumpSection,
 }: {
   section: MockSection;
   answers: Record<string, string>;
@@ -1305,6 +1306,7 @@ export function MockExam({
   onAnswer: (id: string, value: string) => void;
   onFillDemo: () => void;
   onNext: (elapsedSeconds?: number) => void;
+  onJumpSection: (skill: Skill) => void;
 }) {
   const [selectedPaper, setSelectedPaper] = useState(1);
   const paperCount = Math.min(Math.max(papersCount ?? 1, 1), 10);
@@ -1404,21 +1406,29 @@ export function MockExam({
         <div className="mt-5 space-y-3">
           {officialMockSections.map((item, itemIndex) => {
             const skillConfig = isSkill(item.id) ? moduleConfig[item.id] : null;
+            const completed = itemIndex < index;
             return (
-              <div
+              <button
                 key={item.id}
+                onClick={() => onJumpSection(item.id)}
                 className={cn(
-                  "rounded-2xl border p-4",
+                  "w-full rounded-2xl border p-4 text-left transition",
                   item.id === section
                     ? cn("border-[#17342f] text-white shadow-lg", skillConfig ? skillConfig.accent : "bg-[#17342f]")
-                    : itemIndex < index
+                    : completed
                       ? cn("border-transparent", skillConfig?.soft ?? "border-[#bdd3c7] bg-[#edf7ef] text-[#2f7151]")
                       : "border-[#e3dac6] bg-white/60 text-[#315149]",
+                  item.id !== section && "hover:-translate-y-0.5 hover:bg-white/90",
                 )}
               >
                 <p className="font-bold">{item.label}</p>
                 <p className="mt-1 text-xs opacity-75">{item.minutes} min / {item.questions} questions</p>
-              </div>
+                {item.id !== section ? (
+                  <span className="mt-2 inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.14em] opacity-70">
+                    Tap to open <ArrowRight className="h-3 w-3" />
+                  </span>
+                ) : null}
+              </button>
             );
           })}
         </div>

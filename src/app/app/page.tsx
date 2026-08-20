@@ -595,6 +595,10 @@ export default function AppPage() {
     [mockSection, startMockExam, finishMockExam],
   );
 
+  const jumpMockSection = useCallback((skill: Skill) => {
+    setMockSection(skill);
+  }, []);
+
   if (checkingOnboarding) {
     return (
       <main className="exam-grid grid min-h-screen place-items-center bg-[#f5eddc] text-[#17342f]">
@@ -666,6 +670,7 @@ export default function AppPage() {
           onAnswer={(id, value) => setMockAnswers((current) => ({ ...current, [id]: value }))}
           onFillDemo={fillMockDemo}
           onNext={(elapsedSeconds) => moveMockForward(elapsedSeconds)}
+          onJumpSection={jumpMockSection}
         />
       );
     }
