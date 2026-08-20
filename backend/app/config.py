@@ -12,7 +12,11 @@ class Settings(BaseSettings):
     )
 
     APP_NAME: str = "AI IELTS Examiner API"
-    APP_ENV: str = "development"
+    # Fail-closed: production is the default. Anything that relaxes security
+    # (docs exposure, on-screen reset/verification codes, SQLite fallback,
+    # stack fingerprints) is gated by an EXPLICIT APP_ENV=development, never
+    # by a missing value.
+    APP_ENV: str = "production"
     API_PREFIX: str = "/api"
     LOG_LEVEL: str = "INFO"
 

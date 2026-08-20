@@ -261,7 +261,7 @@ export default function AppPage() {
         const key = `bank:${m}:${type}`;
         if (cacheGet(key)) return;
         try {
-          const response = await brainApi.bank(profile, m, type, 60);
+          const response = await brainApi.bank(profile, m, type);
           cacheSet(key, response.session);
         } catch {
           // Background prefetch failures are silent.
@@ -308,11 +308,9 @@ export default function AppPage() {
         await prefetchSession(targetModule, mode);
         await delay(1500);
       }
-      for (const type of typeLists[targetModule]) {
-        if (type === recType) continue;
-        await prefetchBank(targetModule, type);
-        await delay(1500);
-      }
+      // Banks are large (hundreds of items) and would blow the localStorage
+      // quota if every type of every module were prefetched. The recommended
+      // type is already cached above; the rest load+cache on first click.
     })().finally(() => {
       prefetchingRef.current = false;
     });

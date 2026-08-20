@@ -9,8 +9,9 @@ from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 
 import httpx
+import jwt
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from jose import JWTError, jwt
+from jwt import InvalidTokenError
 from sqlalchemy.orm import Session
 
 from .. import models
@@ -105,9 +106,9 @@ def _verify_google_credential(credential: str) -> dict:
             key,
             algorithms=["RS256"],
             audience=expected_audience,
-            issuer=GOOGLE_ISSUERS,
+            issuer=list(GOOGLE_ISSUERS),
         )
-    except JWTError as exc:
+    except InvalidTokenError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Google token is invalid or expired.") from exc
     except HTTPException:
         raise

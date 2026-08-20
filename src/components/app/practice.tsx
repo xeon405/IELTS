@@ -189,7 +189,7 @@ export function PracticeModule({
     for (let attempt = 0; attempt < 3; attempt += 1) {
       if (activeAbort.signal.aborted) return;
       try {
-        const response = await brainApi.bank(profile, module, type, 60);
+        const response = await brainApi.bank(profile, module, type);
         if (response.session && response.session.items.length > 0) {
           cacheSet(cacheKey, response.session);
           response.session.items = rotateFreshItems(response.session.items, module, response.session.mode);

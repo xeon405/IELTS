@@ -1,0 +1,1 @@
+﻿Priority prefetch: meta+recommended first, lazy backfill never blocks clicks; cache blueprint meta/details

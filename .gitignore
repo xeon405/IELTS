@@ -124,5 +124,8 @@ $RECYCLE.BIN/
 # Ideavo specific
 .ideavo/project
 
+# one-off debug probes (never commit)
+_*.mjs
+
 .vercel
 .env*
